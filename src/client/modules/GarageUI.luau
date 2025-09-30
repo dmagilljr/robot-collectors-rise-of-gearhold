@@ -13,6 +13,15 @@ local uiRoot
 local hatchMenu
 local lastDefinitions
 local lastOnHatch
+local balanceLabels = {}
+
+local CURRENCY_ORDER = {"Gearbits", "IonShards", "RareMetals", "Crystals"}
+local CURRENCY_ICONS = {
+    Gearbits = "⚙️",
+    IonShards = "⚡",
+    RareMetals = "🥇",
+    Crystals = "💎",
+}
 
 local function ensureGui()
     if uiRoot and uiRoot.Parent then
@@ -95,6 +104,32 @@ local function canAffordDefinition(definition)
     return true
 end
 
+local function describeCost(definition)
+    local segments = {}
+    for _, currency in ipairs(CURRENCY_ORDER) do
+        local amount = definition.Cost and definition.Cost[currency]
+        if amount and amount > 0 then
+            local balance = getCurrencyBalance(currency)
+            table.insert(segments, string.format("%d %s (You have %d)", amount, currency, balance))
+        end
+    end
+    if #segments == 0 then
+        return "Cost: Free"
+    end
+    return "Cost: " .. table.concat(segments, " • ")
+end
+
+local function refreshBalancePanel()
+    for _, currency in ipairs(CURRENCY_ORDER) do
+        local label = balanceLabels[currency]
+        if label then
+            local amount = getCurrencyBalance(currency)
+            local icon = CURRENCY_ICONS[currency] or ""
+            label.Text = string.format("%s %s: %d", icon, currency, amount)
+        end
+    end
+end
+
 local function buildRobotTypeRow(parent, robotType, definition, onSelected)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, 0, 0, 70)
@@ -136,12 +171,7 @@ local function buildRobotTypeRow(parent, robotType, definition, onSelected)
     costLabel.TextXAlignment = Enum.TextXAlignment.Left
     costLabel.Parent = info
 
-    local costs = {}
-    for currency, amount in pairs(definition.Cost or {}) do
-        table.insert(costs, string.format("%d %s", amount, currency))
-    end
-    table.sort(costs)
-    costLabel.Text = #costs > 0 and ("Cost: " .. table.concat(costs, " • ")) or "Cost: Free"
+    costLabel.Text = describeCost(definition)
 
     local button = Instance.new("TextButton")
     button.Size = UDim2.new(0, 110, 0, 36)
@@ -160,6 +190,8 @@ local function buildRobotTypeRow(parent, robotType, definition, onSelected)
         button.BackgroundColor3 = enabled and Color3.fromRGB(70, 140, 100) or Color3.fromRGB(90, 90, 110)
         button.AutoButtonColor = enabled
         button.TextTransparency = enabled and 0 or 0.25
+        costLabel.Text = describeCost(definition)
+        costLabel.TextColor3 = affordable and Color3.fromRGB(200, 205, 220) or Color3.fromRGB(235, 120, 120)
     end
 
     refreshButton()
@@ -177,11 +209,13 @@ local function buildRobotTypeRow(parent, robotType, definition, onSelected)
         if not canAffordDefinition(definition) then
             showToast("Not enough resources for " .. definition.Name .. ".", 2)
             refreshButton()
+            refreshBalancePanel()
             return
         end
 
         if not GarageUI.requestHatch(robotType) then
             refreshButton()
+            refreshBalancePanel()
             return
         end
 
@@ -189,8 +223,10 @@ local function buildRobotTypeRow(parent, robotType, definition, onSelected)
         if not success then
             resetPending()
             refreshButton()
+            refreshBalancePanel()
         else
             refreshButton()
+            refreshBalancePanel()
         end
     end)
 
@@ -198,13 +234,18 @@ local function buildRobotTypeRow(parent, robotType, definition, onSelected)
     if leaderstats then
         leaderstats.ChildAdded:Connect(function()
             refreshButton()
+            refreshBalancePanel()
         end)
         leaderstats.ChildRemoved:Connect(function()
             refreshButton()
+            refreshBalancePanel()
         end)
         for _, stat in ipairs(leaderstats:GetChildren()) do
             if stat:IsA("IntValue") then
-                stat.Changed:Connect(refreshButton)
+                stat.Changed:Connect(function()
+                    refreshButton()
+                    refreshBalancePanel()
+                end)
             end
         end
     end
@@ -307,6 +348,34 @@ local function buildHatchMenu(robotTypes, onHatch)
     descriptor.TextXAlignment = Enum.TextXAlignment.Left
     descriptor.Parent = hatchMenu
 
+    local balancePanel = Instance.new("Frame")
+    balancePanel.Name = "BalancePanel"
+    balancePanel.Size = UDim2.new(1, 0, 0, 78)
+    balancePanel.BackgroundTransparency = 1
+    balancePanel.Parent = hatchMenu
+
+    local balanceLayout = Instance.new("UIGridLayout")
+    balanceLayout.CellSize = UDim2.new(0, 180, 0, 24)
+    balanceLayout.CellPadding = UDim2.new(0, 12, 0, 12)
+    balanceLayout.FillDirectionMaxCells = 2
+    balanceLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+    balanceLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    balanceLayout.Parent = balancePanel
+
+    balanceLabels = {}
+    for _, currency in ipairs(CURRENCY_ORDER) do
+        local label = Instance.new("TextLabel")
+        label.BackgroundTransparency = 1
+        label.Size = UDim2.new(0, 180, 0, 24)
+        label.Font = Enum.Font.GothamSemibold
+        label.TextColor3 = Color3.fromRGB(220, 225, 235)
+        label.TextSize = 16
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = balancePanel
+        balanceLabels[currency] = label
+    end
+    refreshBalancePanel()
+
     for _, entry in ipairs(toOrderedList(robotTypes)) do
         local button = buildRobotTypeRow(hatchMenu, entry.name, entry.definition, function(robotType)
             if onHatch then
@@ -339,6 +408,7 @@ end
 
 function GarageUI.close()
     hideHatchMenu()
+    balanceLabels = {}
 end
 
 function GarageUI.requestHatch(robotType)
@@ -380,6 +450,7 @@ function GarageUI.handleStatus(status, payload)
             end)
         end
     end
+    refreshBalancePanel()
 end
 
 return GarageUI

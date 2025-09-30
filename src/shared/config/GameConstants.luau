@@ -64,12 +64,15 @@ local GameConstants = {
     },
 
     AUDIO = {
-        DRILL_LOOP = "rbxassetid://1843522355",
-        GARAGE_RUMBLE = "rbxassetid://9118831685",
-        GARAGE_DOOR_OPEN = "rbxassetid://138049992",
-        GARAGE_DOOR_CLOSE = "rbxassetid://138068392",
-        GARAGE_STEAM = "rbxassetid://6026984227",
+        -- Configure with uploaded sound asset IDs or leave blank to disable.
+        DRILL_LOOP = "",
+        GARAGE_RUMBLE = "",
+        GARAGE_DOOR_OPEN = "",
+        GARAGE_DOOR_CLOSE = "",
+        GARAGE_STEAM = "",
     },
+
+    GARAGE_HOME_POSITION = Vector3.new(18, 0, 5),
 }
 
 return GameConstants

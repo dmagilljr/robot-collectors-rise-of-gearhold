@@ -200,7 +200,7 @@ local function moveRobot(robotBody, targetPosition, config, speedMultiplier, del
     return math.max(distance - maxStep, 0)
 end
 
-function RobotManager.spawnRobot(robotType, player)
+function RobotManager.spawnRobot(robotType, player, spawnPosition, spawnLookAt)
     local robotConfig = RobotTypes[robotType]
     if not robotConfig then
         warn("Unknown robot type:", robotType)
@@ -218,7 +218,7 @@ function RobotManager.spawnRobot(robotType, player)
     }
 
     -- Create physical robot in workspace
-    local robotFolder = RobotManager.createRobotModel(robotConfig, robotData, player)
+    local robotFolder = RobotManager.createRobotModel(robotConfig, robotData, player, spawnPosition, spawnLookAt)
     if robotFolder then
         print("✨ Robot", robotConfig.Name, "spawned for", player.Name)
         return robotData, robotFolder
@@ -227,7 +227,7 @@ function RobotManager.spawnRobot(robotType, player)
     return nil, nil
 end
 
-function RobotManager.createRobotModel(robotConfig, robotData, player)
+function RobotManager.createRobotModel(robotConfig, robotData, player, spawnPosition, spawnLookAt)
     local robotFolder = Instance.new("Folder")
     robotFolder.Name = robotConfig.Name .. "_" .. string.sub(robotData.UniqueId, 1, 8)
     robotFolder.Parent = workspace
@@ -239,10 +239,11 @@ function RobotManager.createRobotModel(robotConfig, robotData, player)
     robotBody.Material = Enum.Material.Metal
     robotBody.Anchored = true
     robotBody.CanCollide = false
-    local spawnPlanar = Vector3.new(math.random(-5, 5), 0, math.random(-5, 5))
-    local spawnY = getHoverHeight(spawnPlanar, {robotFolder})
-    local spawnPosition = Vector3.new(spawnPlanar.X, spawnY, spawnPlanar.Z)
-    robotBody.CFrame = CFrame.new(spawnPosition, spawnPosition + Vector3.zAxis)
+    local initialPlanar = spawnPosition and Vector3.new(spawnPosition.X, 0, spawnPosition.Z) or Vector3.new(math.random(-5, 5), 0, math.random(-5, 5))
+    local initialY = getHoverHeight(initialPlanar, {robotFolder})
+    local worldSpawn = spawnPosition and Vector3.new(spawnPosition.X, spawnPosition.Y, spawnPosition.Z) or Vector3.new(initialPlanar.X, initialY, initialPlanar.Z)
+    local lookVector = spawnLookAt or Vector3.zAxis
+    robotBody.CFrame = CFrame.new(worldSpawn, worldSpawn + lookVector)
     robotBody.Parent = robotFolder
     robotBody.CustomPhysicalProperties = PhysicalProperties.new(0.2, 0.3, 0.3, 1, 1)
 
@@ -352,7 +353,7 @@ function RobotManager.createRobotModel(robotConfig, robotData, player)
 
     local robotState = Instance.new("StringValue")
     robotState.Name = "RobotState"
-    robotState.Value = "following"
+    robotState.Value = "garage_rollout"
     robotState.Parent = robotFolder
 
     local uniqueIdValue = Instance.new("StringValue")
@@ -578,7 +579,35 @@ function RobotManager.updateRobotMovement()
             setDrillActive(robotFolder, false)
         end
 
-        if robotState.Value == "following" then
+        if robotState.Value == "garage_rollout" then
+            robotFolder:SetAttribute("LastUpdate", currentTime)
+            continue
+        elseif robotState.Value == "garage_greeting" then
+            local targetPosition
+            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local rootPart = player.Character.HumanoidRootPart
+                local look = rootPart.CFrame.LookVector
+                local right = rootPart.CFrame.RightVector
+                local greetingOffset = (-look * 3) + (right * 1.5)
+                targetPosition = rootPart.Position + Vector3.new(greetingOffset.X, 0, greetingOffset.Z)
+            else
+                targetPosition = robotFolder:GetAttribute("HomePosition") or robotBody.Position
+            end
+
+            targetPosition = getHoverPosition(Vector3.new(targetPosition.X, 0, targetPosition.Z), {robotFolder})
+            local remaining = moveRobot(robotBody, targetPosition, config, 0.45, deltaTime)
+            robotFolder:SetAttribute("HomePosition", targetPosition)
+
+            if remaining <= 1.5 then
+                robotBody.AssemblyLinearVelocity = Vector3.zero
+                robotBody.AssemblyAngularVelocity = Vector3.zero
+                robotFolder:SetAttribute("FollowOffset", nil)
+                robotState.Value = "following"
+            end
+
+            robotFolder:SetAttribute("LastUpdate", currentTime)
+            continue
+        elseif robotState.Value == "following" then
             setTaskState(robotFolder, TASK_STATES.IDLE)
 
             if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
@@ -678,6 +707,9 @@ function RobotManager.updateRobotMovement()
                     setTaskState(robotFolder, TASK_STATES.SEEKING)
                     taskState = TASK_STATES.SEEKING
                 else
+                    local resourcePos = targetResource.Position
+                    local holdPosition = getHoverPosition(Vector3.new(resourcePos.X, 0, resourcePos.Z), {robotFolder})
+                    moveRobot(robotBody, holdPosition, config, 0.4, deltaTime)
                     robotBody.AssemblyLinearVelocity = Vector3.zero
                     local elapsed = currentTime - (robotFolder:GetAttribute("LastUpdate") or currentTime)
                     local miningTimer = (robotFolder:GetAttribute("MiningTimer") or 0) + elapsed

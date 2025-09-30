@@ -22,11 +22,27 @@ local garageParts = {}
 local activeHatches = {}
 local garageEffects = nil
 
-local function sampleHoverPosition(position)
+local function sampleHoverPosition(position, extraIgnore)
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Exclude
     params.IgnoreWater = false
-    params.FilterDescendantsInstances = {}
+
+    local ignoreList = {}
+    if garageParts.Shell then
+        table.insert(ignoreList, garageParts.Shell)
+    end
+    if garageParts.Door then
+        table.insert(ignoreList, garageParts.Door)
+    end
+    if extraIgnore then
+        for _, inst in ipairs(extraIgnore) do
+            if inst then
+                table.insert(ignoreList, inst)
+            end
+        end
+    end
+
+    params.FilterDescendantsInstances = ignoreList
 
     local origin = Vector3.new(position.X, GameConstants.HOVER_RAYCAST_HEIGHT, position.Z)
     local result = Workspace:Raycast(origin, Vector3.new(0, -GameConstants.HOVER_RAYCAST_HEIGHT * 2, 0), params)
@@ -38,17 +54,32 @@ local function sampleHoverPosition(position)
     return Vector3.new(position.X, GameConstants.ROBOT_HEIGHT, position.Z)
 end
 
+local function pointOnPartSurface(part, offset)
+    if not part then
+        return nil
+    end
+    local worldCFrame = part.CFrame * CFrame.new(offset.X, offset.Y, offset.Z)
+    local worldPosition = worldCFrame.Position
+    return sampleHoverPosition(worldPosition)
+end
+
 local function findGarageParts()
     local floor = Workspace:FindFirstChild(GARAGE_MODEL_NAMES.Floor)
     local shell = Workspace:FindFirstChild(GARAGE_MODEL_NAMES.Shell)
     local door = Workspace:FindFirstChild(GARAGE_MODEL_NAMES.Door)
     local walkway = Workspace:FindFirstChild(GARAGE_MODEL_NAMES.Walkway)
+    local header = Workspace:FindFirstChild("GarageDoorHeader")
+    local trackLeft = Workspace:FindFirstChild("GarageDoorTrackLeft")
+    local trackRight = Workspace:FindFirstChild("GarageDoorTrackRight")
 
     if floor and shell and door then
         garageParts.Floor = floor
         garageParts.Shell = shell
         garageParts.Door = door
         garageParts.Walkway = walkway
+        garageParts.DoorHeader = header
+        garageParts.DoorTrackLeft = trackLeft
+        garageParts.DoorTrackRight = trackRight
     end
 end
 
@@ -67,14 +98,19 @@ local function ensureGarageEffects()
     ensureGarageParts()
 
     local walkway = garageParts.Walkway
-    local door = garageParts.Door
+    local doorGroup = garageParts.Door
     local shell = garageParts.Shell
-    if not (walkway and door and shell) then
+    if not (walkway and doorGroup and shell) then
         return nil
     end
 
     local audioConfig = GameConstants.AUDIO or {}
     garageEffects = {}
+
+    local doorReference = doorGroup:FindFirstChildWhichIsA("BasePart")
+    if not doorReference then
+        doorReference = walkway
+    end
 
     local steamAttachment = walkway:FindFirstChild("GarageSteamAttachment")
     if not steamAttachment then
@@ -124,7 +160,7 @@ local function ensureGarageEffects()
     end
 
     if audioConfig.GARAGE_RUMBLE and audioConfig.GARAGE_RUMBLE ~= "" then
-        local rumbleSound = door:FindFirstChild("GarageRumbleSound")
+        local rumbleSound = doorReference:FindFirstChild("GarageRumbleSound")
         if not rumbleSound then
             rumbleSound = Instance.new("Sound")
             rumbleSound.Name = "GarageRumbleSound"
@@ -133,38 +169,89 @@ local function ensureGarageEffects()
             rumbleSound.Looped = false
             rumbleSound.RollOffMode = Enum.RollOffMode.Linear
             rumbleSound.RollOffMaxDistance = 80
-            rumbleSound.Parent = door
+            rumbleSound.Parent = doorReference
         end
         garageEffects.rumbleSound = rumbleSound
     end
 
     if audioConfig.GARAGE_DOOR_OPEN and audioConfig.GARAGE_DOOR_OPEN ~= "" then
-        local openSound = door:FindFirstChild("GarageDoorOpen")
+        local openSound = doorReference:FindFirstChild("GarageDoorOpen")
         if not openSound then
             openSound = Instance.new("Sound")
             openSound.Name = "GarageDoorOpen"
             openSound.SoundId = audioConfig.GARAGE_DOOR_OPEN
             openSound.Volume = 0.6
             openSound.Looped = false
-            openSound.Parent = door
+            openSound.Parent = doorReference
         end
         garageEffects.doorOpenSound = openSound
     end
 
     if audioConfig.GARAGE_DOOR_CLOSE and audioConfig.GARAGE_DOOR_CLOSE ~= "" then
-        local closeSound = door:FindFirstChild("GarageDoorClose")
+        local closeSound = doorReference:FindFirstChild("GarageDoorClose")
         if not closeSound then
             closeSound = Instance.new("Sound")
             closeSound.Name = "GarageDoorClose"
             closeSound.SoundId = audioConfig.GARAGE_DOOR_CLOSE
             closeSound.Volume = 0.55
             closeSound.Looped = false
-            closeSound.Parent = door
+            closeSound.Parent = doorReference
         end
         garageEffects.doorCloseSound = closeSound
     end
 
+    local interiorLight = shell:FindFirstChild("GarageInteriorLight")
+    if not interiorLight then
+        interiorLight = Instance.new("PointLight")
+        interiorLight.Name = "GarageInteriorLight"
+        interiorLight.Range = 18
+        interiorLight.Brightness = 0
+        interiorLight.Enabled = false
+        interiorLight.Color = Color3.fromRGB(255, 214, 170)
+        interiorLight.Shadows = true
+        interiorLight.Parent = shell
+    end
+    garageEffects.interiorLight = interiorLight
+
     return garageEffects
+end
+
+local function getRolloutWaypoints()
+    ensureGarageParts()
+    local walkway = garageParts.Walkway
+    if walkway then
+        local topOffset = walkway.Size.Y / 2
+        local halfWidth = walkway.Size.X / 2
+        local halfDepth = walkway.Size.Z / 2
+
+        local interiorZ = walkway.Position.Z - halfDepth + 0.8
+        local thresholdZ = walkway.Position.Z - halfDepth + 2.4
+        local greetZ = walkway.Position.Z + halfDepth - 0.8
+
+        local centerX = walkway.Position.X
+        local greetX = math.clamp(walkway.Position.X + 3, walkway.Position.X - halfWidth + 1, walkway.Position.X + halfWidth - 1)
+
+        local startPosition = sampleHoverPosition(Vector3.new(centerX, 0, interiorZ))
+        local thresholdPosition = sampleHoverPosition(Vector3.new(centerX, 0, thresholdZ))
+        local greetPosition = sampleHoverPosition(Vector3.new(greetX, 0, greetZ))
+
+        return startPosition, thresholdPosition, greetPosition
+    end
+
+    local fallback = sampleHoverPosition(Vector3.new(22, 0, 4))
+    return fallback, fallback, fallback
+end
+
+local function beginGreeting(robotFolder, player)
+    local robotState = robotFolder:FindFirstChild("RobotState")
+    if not robotState then
+        return
+    end
+
+    robotFolder:SetAttribute("GreetingPlayerId", player and player.UserId or nil)
+    robotFolder:SetAttribute("GreetingStartTime", os.clock())
+    robotFolder:SetAttribute("TaskState", "idle")
+    robotState.Value = "garage_greeting"
 end
 
 local function canAfford(player, robotType)
@@ -186,59 +273,44 @@ local function refundCost(player, robotType)
     end
 end
 
-local function rollOutRobot(robotFolder)
+local function rollOutRobot(robotFolder, player)
     ensureGarageParts()
-    local walkway = garageParts.Walkway
-    local floor = garageParts.Floor
-    local door = garageParts.Door
-    if not (walkway and floor and door) then
-        return
-    end
-
     local robotBody = robotFolder and robotFolder:FindFirstChild("RobotBody")
     if not robotBody then
         return
     end
 
+    local startPosition, thresholdPosition, greetPosition = getRolloutWaypoints()
     robotBody.Anchored = true
+    robotBody.CFrame = CFrame.new(startPosition, thresholdPosition)
+    robotBody.AssemblyLinearVelocity = Vector3.zero
+    robotBody.AssemblyAngularVelocity = Vector3.zero
 
-    local targets = {}
-
-    local floorStart = floor.CFrame * CFrame.new(-floor.Size.X/2 + 4, floor.Size.Y/2, 0)
-    table.insert(targets, sampleHoverPosition(Vector3.new(floorStart.X, 0, floorStart.Z)))
-
-    local walkwayStart = walkway.CFrame * CFrame.new(-walkway.Size.X/2 + 1.5, walkway.Size.Y/2, 0)
-    table.insert(targets, sampleHoverPosition(Vector3.new(walkwayStart.X, 0, walkwayStart.Z)))
-
-    local walkwayMid = walkway.CFrame * CFrame.new(0, walkway.Size.Y/2, 0)
-    table.insert(targets, sampleHoverPosition(Vector3.new(walkwayMid.X, 0, walkwayMid.Z)))
-
-    local walkwayEnd = walkway.CFrame * CFrame.new(walkway.Size.X/2 - 1.5, walkway.Size.Y/2, 0)
-    table.insert(targets, sampleHoverPosition(Vector3.new(walkwayEnd.X, 0, walkwayEnd.Z)))
-
-    local padTarget = sampleHoverPosition(Vector3.new(0, 0, 0))
-    table.insert(targets, padTarget)
-
-    local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-
-    local index = 1
-    local function step()
-        local target = targets[index]
-        if not target then
-            robotBody.Anchored = false
-            return
+    local function tweenToPosition(target, duration, easingStyle, easingDirection, onComplete)
+        local lookAt = greetPosition
+        if (target - lookAt).Magnitude < 0.01 then
+            lookAt = target + Vector3.new(0, 0, -1)
         end
-        local nextTarget = targets[index + 1] or (target + Vector3.new(0, 0, -1))
-        local cframeTarget = CFrame.new(target, nextTarget)
-        local tween = TweenService:Create(robotBody, tweenInfo, {CFrame = cframeTarget})
-        tween.Completed:Connect(function()
-            index += 1
-            step()
-        end)
+        local tween = TweenService:Create(robotBody, TweenInfo.new(duration, easingStyle, easingDirection), {
+            CFrame = CFrame.new(target, lookAt)
+        })
+        if onComplete then
+            tween.Completed:Connect(onComplete)
+        end
         tween:Play()
     end
 
-    step()
+    tweenToPosition(thresholdPosition, 1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, function()
+        task.delay(0.4, function()
+            tweenToPosition(greetPosition, 0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, function()
+                robotBody.AssemblyLinearVelocity = Vector3.zero
+                robotBody.AssemblyAngularVelocity = Vector3.zero
+                robotBody.Anchored = false
+                robotFolder:SetAttribute("HomePosition", greetPosition)
+                beginGreeting(robotFolder, player)
+            end)
+        end)
+    end)
 end
 
 local function animateGarage(duration)
@@ -249,18 +321,48 @@ local function animateGarage(duration)
 
     local effects = ensureGarageEffects()
     local openDuration = duration or 2.5
-    local door = garageParts.Door
+    local doorGroup = garageParts.Door
     local shell = garageParts.Shell
 
-    local doorGoalOpen = {CFrame = door.CFrame * CFrame.new(0, 0, -3)}
-    local doorGoalClose = {CFrame = door.CFrame}
+    local slats = {}
+    if doorGroup and doorGroup:IsA("Folder") then
+        for _, child in ipairs(doorGroup:GetChildren()) do
+            if child:IsA("BasePart") then
+                table.insert(slats, child)
+            end
+        end
+    end
+    table.sort(slats, function(a, b)
+        return a.Position.Y < b.Position.Y
+    end)
 
-    local openTween = TweenService:Create(door, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), doorGoalOpen)
-    local closeTween = TweenService:Create(door, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.In), doorGoalClose)
+    local slatData = {}
+    local minY, maxY = math.huge, -math.huge
+    for _, slat in ipairs(slats) do
+        minY = math.min(minY, slat.Position.Y - slat.Size.Y / 2)
+        maxY = math.max(maxY, slat.Position.Y + slat.Size.Y / 2)
+    end
+    local doorHeight = maxY - minY
+
+    local header = garageParts.DoorHeader
+    local backDepth = header and (header.Size.Z + 0.4) or 2
+
+    for index, slat in ipairs(slats) do
+        local baseCFrame = slat.CFrame
+        local liftAmount = doorHeight + 0.9 - (index - 1) * (slat.Size.Y * 0.78)
+        local liftCFrame = baseCFrame * CFrame.new(0, liftAmount, 0)
+        local backCFrame = liftCFrame * CFrame.new(0, 0, -backDepth)
+        table.insert(slatData, {
+            part = slat,
+            baseCFrame = baseCFrame,
+            openCFrame = liftCFrame,
+            backCFrame = backCFrame,
+        })
+    end
 
     local shakeTween
     local baseShellCFrame = shell.CFrame
-    shakeTween = TweenService:Create(shell, TweenInfo.new(0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 6, true), {CFrame = baseShellCFrame * CFrame.Angles(0, 0, math.rad(2))})
+    shakeTween = TweenService:Create(shell, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut, 6, true), {CFrame = baseShellCFrame * CFrame.Angles(0, 0, math.rad(2.5))})
     shakeTween:Play()
 
     if effects then
@@ -281,11 +383,25 @@ local function animateGarage(duration)
         if effects.steamSound then
             effects.steamSound:Play()
         end
+        if effects.interiorLight then
+            effects.interiorLight.Enabled = true
+            effects.interiorLight.Brightness = 4
+        end
     end
 
-    openTween:Play()
+    for index, data in ipairs(slatData) do
+        data.part.CanCollide = false
+        local liftTween = TweenService:Create(data.part, TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {CFrame = data.openCFrame})
+        local backTween = TweenService:Create(data.part, TweenInfo.new(0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {CFrame = data.backCFrame})
+        task.delay(0.05 * (index - 1), function()
+            liftTween.Completed:Connect(function()
+                backTween:Play()
+            end)
+            liftTween:Play()
+        end)
+    end
 
-    task.delay(openDuration, function()
+    task.delay(openDuration + 3, function()
         if shakeTween then
             shakeTween:Cancel()
             shell.CFrame = baseShellCFrame
@@ -293,7 +409,23 @@ local function animateGarage(duration)
         if effects and effects.doorCloseSound then
             effects.doorCloseSound:Play()
         end
-        closeTween:Play()
+        if effects and effects.interiorLight then
+            effects.interiorLight.Enabled = false
+        end
+        for index = #slatData, 1, -1 do
+            local data = slatData[index]
+            local forwardTween = TweenService:Create(data.part, TweenInfo.new(0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {CFrame = data.openCFrame})
+            local dropTween = TweenService:Create(data.part, TweenInfo.new(0.45, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {CFrame = data.baseCFrame})
+            task.delay(0.05 * (#slatData - index), function()
+                forwardTween.Completed:Connect(function()
+                    dropTween.Completed:Connect(function()
+                        data.part.CanCollide = true
+                    end)
+                    dropTween:Play()
+                end)
+                forwardTween:Play()
+            end)
+        end
     end)
 end
 
@@ -332,7 +464,20 @@ function GarageService.hatchRobot(player, robotType, notify)
     animateGarage(2.5)
 
     task.delay(1.0, function()
-        local ok, robotDataOrError, robotFolder = pcall(RobotManager.spawnRobot, robotType, player)
+        local spawnPosition, thresholdPosition = getRolloutWaypoints()
+        local spawnLook
+        if spawnPosition and thresholdPosition then
+            local dir = thresholdPosition - spawnPosition
+            if dir.Magnitude > 0 then
+                spawnLook = dir.Unit
+            end
+        end
+
+        if not spawnPosition and GameConstants.GARAGE_HOME_POSITION then
+            spawnPosition = GameConstants.GARAGE_HOME_POSITION
+        end
+
+        local ok, robotDataOrError, robotFolder = pcall(RobotManager.spawnRobot, robotType, player, spawnPosition, spawnLook)
         if not ok then
             warn("Failed to spawn robot after hatch:", robotDataOrError)
             refundCost(player, robotType)
@@ -358,7 +503,11 @@ function GarageService.hatchRobot(player, robotType, notify)
 
         PlayerManager.addRobotToPlayer(player.UserId, robotData)
         if robotFolder then
-            rollOutRobot(robotFolder)
+            local robotState = robotFolder:FindFirstChild("RobotState")
+            if robotState then
+                robotState.Value = "garage_rollout"
+            end
+            rollOutRobot(robotFolder, player)
         end
 
         signal("completed", {

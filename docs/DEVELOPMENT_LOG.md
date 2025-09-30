@@ -12,6 +12,12 @@
 - Embedded garage controls into the operations console with live status text, quick hatch buttons, and automatic robot roster refreshes.
 - Hooked leaderstats/resource updates into the quick hatch availability checks and refreshed RemoteSetup specs for the new remote.
 - Layered drill loop audio plus garage steam/door rumble effects so hatch sequences feel grounded.
+- Resolved the garage prompt closing immediately after release; the hatch menu now stays open until you walk away or leave the console.
+- Disabled placeholder Marketplace sound IDs (set via `GameConstants.AUDIO`) to eliminate 403 errors until bespoke assets are uploaded.
+- Smoothed the garage rollout path so freshly-hatched robots travel down the walkway instead of popping out the roof.
+- Garage menu now shows current balances for Gearbits/Ion Shards/etc. and highlights whether you can afford each blueprint.
+- Garage rollout now spawns bots at the interior waypoint, filters the shell/door from hover checks, and hands off to a “garage greeting” state so units roll out, pause in front of the player, then transition into follow without bouncing.
+- Garage door rebuilt as segmented roll-up slats with synchronized lighting/rumble; door now slides upward instead of swinging through the bay so players aren’t knocked back during hatch.
 
 ## Follow-up
 - Layer drill/garage VFX and audio cues now that hatch status callbacks exist.

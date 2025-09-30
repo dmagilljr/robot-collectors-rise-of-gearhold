@@ -221,6 +221,7 @@ local openGarageButton
 local quickButtons = {}
 local garageStatusText = "Garage ready"
 local garageStatusToken = 0
+local PROMPT_TRIGGER_GRACE = 0.5
 
 local function refreshQuickButtons()
     local busy = GarageUI.isBusy()
@@ -550,11 +551,8 @@ local function bindGaragePrompt(prompt)
         if otherPlayer and otherPlayer ~= Player then
             return
         end
+        prompt:SetAttribute("RC_LastTrigger", os.clock())
         openGarageMenu()
-    end)
-
-    prompt.TriggerEnded:Connect(function()
-        GarageUI.close()
     end)
 end
 
@@ -572,6 +570,14 @@ end)
 
 ProximityPromptService.PromptHidden:Connect(function(prompt)
     if prompt.Name == "GaragePrompt" then
+        local lastTrigger = prompt:GetAttribute("RC_LastTrigger")
+        if lastTrigger then
+            local elapsed = os.clock() - lastTrigger
+            if elapsed <= PROMPT_TRIGGER_GRACE then
+                prompt:SetAttribute("RC_LastTrigger", nil)
+                return
+            end
+        end
         GarageUI.close()
     end
 end)

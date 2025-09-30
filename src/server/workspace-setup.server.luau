@@ -16,7 +16,10 @@ local function shouldRemove(obj)
             or obj.Name == "SpawnPlatform"
             or obj.Name == "GarageFloor"
             or obj.Name == "GarageShell"
-            or obj.Name == "GarageDoor" then
+            or obj.Name == "GarageDoor"
+            or obj.Name == "GarageDoorHeader"
+            or obj.Name == "GarageDoorTrackLeft"
+            or obj.Name == "GarageDoorTrackRight" then
             return true
         end
 
@@ -96,16 +99,30 @@ garageShell.Transparency = 0.25
 garageShell:SetAttribute("GeneratedBySetup", true)
 garageShell.Parent = workspace
 
-local garageDoor = Instance.new("Part")
-garageDoor.Name = "GarageDoor"
-garageDoor.Size = Vector3.new(20, 10, 0.6)
-garageDoor.Position = Vector3.new(28, 5, 5)
-garageDoor.Anchored = true
-garageDoor.Material = Enum.Material.Metal
-garageDoor.Color = Color3.fromRGB(50, 120, 160)
-garageDoor.Transparency = 0.4
-garageDoor:SetAttribute("GeneratedBySetup", true)
-garageDoor.Parent = workspace
+local doorGroup = Instance.new("Folder")
+doorGroup.Name = "GarageDoor"
+doorGroup:SetAttribute("GeneratedBySetup", true)
+doorGroup.Parent = workspace
+
+local slatCount = 6
+local doorWidth = 20
+local doorHeight = 10
+local slatThickness = 0.4
+local slatHeight = doorHeight / slatCount
+
+for i = 0, slatCount - 1 do
+    local slat = Instance.new("Part")
+    slat.Name = "DoorSlat_" .. i
+    slat.Size = Vector3.new(doorWidth, slatHeight, slatThickness)
+    slat.Anchored = true
+    slat.Material = Enum.Material.Metal
+    slat.Color = Color3.fromRGB(50, 120, 160)
+    slat.Transparency = 0.3
+    slat:SetAttribute("GeneratedBySetup", true)
+    local yPosition = slatHeight / 2 + i * slatHeight
+    slat.CFrame = CFrame.new(28, yPosition, 5)
+    slat.Parent = doorGroup
+end
 
 local walkway = Instance.new("Part")
 walkway.Name = "GarageWalkway"
@@ -117,15 +134,45 @@ walkway.Color = Color3.fromRGB(90, 95, 110)
 walkway:SetAttribute("GeneratedBySetup", true)
 walkway.Parent = workspace
 
+local doorHeader = Instance.new("Part")
+doorHeader.Name = "GarageDoorHeader"
+doorHeader.Size = Vector3.new(20.5, 1.2, 2)
+doorHeader.Position = Vector3.new(28, 10.6, 4)
+doorHeader.Anchored = true
+doorHeader.Transparency = 1
+doorHeader.CanCollide = false
+doorHeader:SetAttribute("GeneratedBySetup", true)
+doorHeader.Parent = workspace
+
+local doorTrackLeft = Instance.new("Part")
+doorTrackLeft.Name = "GarageDoorTrackLeft"
+doorTrackLeft.Size = Vector3.new(0.5, 12, 0.5)
+doorTrackLeft.Position = Vector3.new(18 - (doorWidth / 2) - 0.25, 6, 5)
+doorTrackLeft.Anchored = true
+doorTrackLeft.Transparency = 1
+doorTrackLeft.CanCollide = false
+doorTrackLeft:SetAttribute("GeneratedBySetup", true)
+doorTrackLeft.Parent = workspace
+
+local doorTrackRight = Instance.new("Part")
+doorTrackRight.Name = "GarageDoorTrackRight"
+doorTrackRight.Size = Vector3.new(0.5, 12, 0.5)
+doorTrackRight.Position = Vector3.new(18 + (doorWidth / 2) + 0.25, 6, 5)
+doorTrackRight.Anchored = true
+doorTrackRight.Transparency = 1
+doorTrackRight.CanCollide = false
+doorTrackRight:SetAttribute("GeneratedBySetup", true)
+doorTrackRight.Parent = workspace
+
 local console = Instance.new("Part")
 console.Name = "GarageConsole"
 console.Size = Vector3.new(2, 3, 1)
-console.Position = Vector3.new(24, 1.5, -2)
 console.Anchored = true
 console.Material = Enum.Material.Neon
 console.Color = Color3.fromRGB(80, 140, 200)
 console.CanCollide = false
 console:SetAttribute("GeneratedBySetup", true)
+console.CFrame = CFrame.new(42, 1.5, 5, 0, 0, 1, 0, 1, 0, -1, 0, 0) -- position to the right of the garage, facing left
 console.Parent = workspace
 
 local prompt = Instance.new("ProximityPrompt")
