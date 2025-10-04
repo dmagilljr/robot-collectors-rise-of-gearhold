@@ -1,4 +1,4 @@
-# Roblox / build artifacts
+# build artifacts / local state
 *.rbxlx
 *.rbxm
 *.rbxmx
