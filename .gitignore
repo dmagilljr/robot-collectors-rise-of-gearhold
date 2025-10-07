@@ -7,3 +7,10 @@ rojo-*.log
 *.rbxlx.lock
 # VSCode
 .vscode/
+*.rbxlx
+*.rbxlx.lock
+*.gsheet
+* 2
+archive_*/
+/docs/
+/src/
