@@ -1,6 +1,9 @@
-# Roblox / build artifacts
-*.rbxlx
-*.rbxm
-*.rbxmx
-.rojo
-.DS_Store
+# build & logs
+rojo-*.log
+*.tmp
+*.DS_Store
+
+# Roblox project artifacts
+*.rbxlx.lock
+# VSCode
+.vscode/
