@@ -97,7 +97,9 @@ function Garage.Mount(spec: Spec): () -> ()
 	local leftPart = ensure(root, "GD_Left", Vector3.new(WALL_T, SHELL_H, SHELL_D), basis(leftCenter), PROPS_SOLID)
 	local rightPart = ensure(root, "GD_Right", Vector3.new(WALL_T, SHELL_H, SHELL_D), basis(rightCenter), PROPS_SOLID)
 
-	local roofCenter = center + shellHeightOffset + u * ((SHELL_H - WALL_T) * 0.5 - (SHELL_H * 0.5 - spec.height * 0.5)) + inw * (SHELL_D * 0.5 + FRONT_MARGIN)
+	local roofCenter = center + shellHeightOffset
+		+ u * ((SHELL_H - WALL_T) * 0.5 - (SHELL_H * 0.5 - spec.height * 0.5) + 0.12)
+		+ inw * (SHELL_D * 0.5 + FRONT_MARGIN)
 	local roof = ensure(root, "GD_Roof", Vector3.new(SHELL_W, WALL_T, SHELL_D), basis(roofCenter), PROPS_SOLID)
 
 	local floorCenter = center + u * (0.1 - spec.height * 0.5) + inw * ((SHELL_D - GAP) * 0.5 + FRONT_MARGIN)
