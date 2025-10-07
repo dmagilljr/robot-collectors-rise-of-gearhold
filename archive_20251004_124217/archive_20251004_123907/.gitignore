@@ -1,0 +1,172 @@
+# Roblox Development .gitignore
+
+# Roblox Studio Files
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+
+# Roblox Place Files
+*.rbxl.lock
+
+# Roblox Model Files
+*.rbxm.backup
+
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Roblox Studio Temporary Files
+*.tmp
+*.temp
+
+# Plugin Development
+*.lua.backup
+*.json.backup
+
+# Rojo Files (if using Rojo)
+*.project.json
+build/
+dist/
+out/
+
+# Node.js (if using for tooling)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Package managers
+package-lock.json
+yarn.lock
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Documentation build output
+docs/_build/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Build outputs
+build/
+dist/
+out/
+
+# Asset processing
+*.processed
+assets/processed/
+
+# Roblox Analytics
+analytics/
+metrics/
+
+# User-specific files
+user_data/
+player_data/
+*.user
+
+# Custom game data that shouldn't be tracked
+saved_games/
+player_saves/
+game_analytics/
+
+# Testing files
+test_output/
+test_results/
+*.test.lua
+
+# Profiling output
+*.prof
+profile_output/
+
+# Memory dumps
+*.dmp
+*.dump
+
+# Error logs and crash reports
+crash_reports/
+error_logs/
+*.crash
+
+# Temporary Roblox files
+*.rbxtemp
+*.studiotemp
+
+# Plugin specific ignores
+*.plugin.local
+
+# Documentation that gets auto-generated
+api_docs/
+auto_generated_docs/
+
+# Performance testing
+benchmarks/
+performance_tests/
+
+# Configuration files that might contain sensitive data
+config.local.lua
+settings.local.lua
+secrets.lua
+
+# Database files (if any)
+*.db
+*.sqlite
+*.sqlite3
+
+# Archive files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# System files
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*

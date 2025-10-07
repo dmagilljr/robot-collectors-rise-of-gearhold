@@ -1,0 +1,75 @@
+-- Robot Collectors: Rise of Gearhold - Refactored Client Entry Point
+-- VERSION: v3.1-MODULAR (2025-09-28)
+print("🎮 Robot Collectors: Modular Client Starting... v3.1-MODULAR")
+
+-- Import modules
+local GuiManager = require(script.modules.GuiManager)
+local RemoteManager = require(script.modules.RemoteManager)
+local ResourceManager = require(script.modules.ResourceManager)
+local RobotUIManager = require(script.modules.RobotUIManager)
+local InputManager = require(script.modules.InputManager)
+
+-- Initialize remote events
+local remotes = RemoteManager.getRemotes()
+print("✅ Client: Remote events loaded")
+
+-- Create main GUI
+local mainGui = GuiManager.createMainGui()
+
+-- Create panels
+local resourcePanelData = GuiManager.createResourcePanel(mainGui)
+local robotPanelData = GuiManager.createRobotPanel(mainGui)
+local hatchPanelData = GuiManager.createHatchPanel(mainGui)
+
+-- Update functions
+local function updateResourceDisplay()
+    ResourceManager.updateResourceDisplay(resourcePanelData.labels)
+end
+
+local function updateRobotList()
+    RobotUIManager.updateRobotList(robotPanelData.scrollFrame, remotes)
+end
+
+-- Setup hatch button functionality
+hatchPanelData.buttons.basic.Activated:Connect(function()
+    print("🥚 Hatching Basic robot...")
+    remotes.HatchRobot:FireServer("Basic", 1)
+
+    -- Visual feedback (non-blocking)
+    task.spawn(function()
+        local originalColor = hatchPanelData.buttons.basic.BackgroundColor3
+        hatchPanelData.buttons.basic.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        task.wait(0.2)
+        hatchPanelData.buttons.basic.BackgroundColor3 = originalColor
+    end)
+end)
+
+hatchPanelData.buttons.advanced.Activated:Connect(function()
+    print("⚡ Hatching Advanced robot...")
+    remotes.HatchRobot:FireServer("Advanced", 1)
+
+    -- Visual feedback (non-blocking)
+    task.spawn(function()
+        local originalColor = hatchPanelData.buttons.advanced.BackgroundColor3
+        hatchPanelData.buttons.advanced.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        task.wait(0.2)
+        hatchPanelData.buttons.advanced.BackgroundColor3 = originalColor
+    end)
+end)
+
+-- Setup input handling
+InputManager.setupMiningInput(remotes, RobotUIManager, updateRobotList)
+
+-- Auto-update everything
+task.spawn(function()
+    while true do
+        updateResourceDisplay()
+        updateRobotList()
+        task.wait(1)
+    end
+end)
+
+-- Connect leaderstats monitoring
+ResourceManager.connectLeaderstats(updateResourceDisplay)
+
+print("🎮 Robot Collectors client initialized! v3.1-MODULAR")

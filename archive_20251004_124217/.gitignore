@@ -1,0 +1,6 @@
+# build artifacts / local state
+*.rbxlx
+*.rbxm
+*.rbxmx
+.rojo
+.DS_Store

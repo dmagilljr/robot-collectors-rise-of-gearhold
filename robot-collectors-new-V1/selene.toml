@@ -1,0 +1,11 @@
+std = "roblox+luau"
+
+[rules]
+global_usage = "deny"
+incorrect_standard_library_use = "warn"
+unstable_features = "warn"
+multiple_statements = "deny"
+
+[roblox]
+# treat these services as globals provided by environment
+load_default_services = true

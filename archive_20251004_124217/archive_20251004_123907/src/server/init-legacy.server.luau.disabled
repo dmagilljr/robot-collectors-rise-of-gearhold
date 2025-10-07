@@ -1,0 +1,942 @@
+-- Robot Collectors: Rise of Gearhold - Server Entry Point
+-- VERSION: v3.0-modern (2025-09-27)
+print("🤖 Robot Collectors: Server Starting... v3.1-SYNC-TEST (2025-09-27 22:05)")
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+-- Create remote events
+local remotes = Instance.new("Folder")
+remotes.Name = "Remotes"
+remotes.Parent = ReplicatedStorage
+
+local hatchRobotEvent = Instance.new("RemoteEvent")
+hatchRobotEvent.Name = "HatchRobot"
+hatchRobotEvent.Parent = remotes
+
+local setRobotStateEvent = Instance.new("RemoteEvent")
+setRobotStateEvent.Name = "SetRobotState"
+setRobotStateEvent.Parent = remotes
+
+
+local manualMineEvent = Instance.new("RemoteEvent")
+manualMineEvent.Name = "ManualMine"
+manualMineEvent.Parent = remotes
+
+local assignRobotToResourceEvent = Instance.new("RemoteEvent")
+assignRobotToResourceEvent.Name = "AssignRobotToResource"
+assignRobotToResourceEvent.Parent = remotes
+
+-- Player data storage
+local playerData = {}
+
+-- Robot types and their properties
+local robotTypes = {
+    Basic = {
+        Name = "Basic Bot",
+        Type = "Collector",
+        Rarity = "Common",
+        Cost = {Gearbits = 50},  -- Only need gearbits for basic robot
+        Color = Color3.fromRGB(150, 150, 150),
+        Size = Vector3.new(2, 3, 1.5),
+        Speed = 1,
+        Efficiency = 1
+    },
+    Advanced = {
+        Name = "Advanced Bot",
+        Type = "Collector",
+        Rarity = "Uncommon",
+        Cost = {Gearbits = 25, IonShards = 15},  -- Requires both currencies
+        Color = Color3.fromRGB(0, 255, 0),
+        Size = Vector3.new(2.2, 3.2, 1.7),
+        Speed = 1.2,
+        Efficiency = 2
+    },
+    Elite = {
+        Name = "Elite Bot",
+        Type = "Collector",
+        Rarity = "Rare",
+        Cost = {Gearbits = 50, IonShards = 25, RareMetals = 5},  -- High-end expensive robot
+        Color = Color3.fromRGB(0, 150, 255),
+        Size = Vector3.new(2.5, 3.5, 2),
+        Speed = 1.5,
+        Efficiency = 3
+    }
+}
+
+-- Initialize player data
+local function initializePlayer(player)
+    if playerData[player.UserId] then return end
+
+    playerData[player.UserId] = {
+        Currency = {
+            Gearbits = 0,        -- Start with no currency - must mine to earn
+            IonShards = 0,       -- Secondary currency
+            RareMetals = 0,      -- Premium currency (earned through mining)
+            Crystals = 0         -- Elite currency (future use)
+        },
+        Robots = {},
+        Level = 1
+    }
+
+    -- Create leaderstats
+    local leaderstats = Instance.new("Folder")
+    leaderstats.Name = "leaderstats"
+    leaderstats.Parent = player
+
+    local gearbits = Instance.new("IntValue")
+    gearbits.Name = "Gearbits"
+    gearbits.Value = 0        -- Start with no currency - must mine to earn
+    gearbits.Parent = leaderstats
+
+    local ionShards = Instance.new("IntValue")
+    ionShards.Name = "IonShards"
+    ionShards.Value = 0       -- Start with no currency - must mine to earn
+    ionShards.Parent = leaderstats
+
+    local rareMetals = Instance.new("IntValue")
+    rareMetals.Name = "RareMetals"
+    rareMetals.Value = 0
+    rareMetals.Parent = leaderstats
+
+    local crystals = Instance.new("IntValue")
+    crystals.Name = "Crystals"
+    crystals.Value = 0        -- Elite currency (future use)
+    crystals.Parent = leaderstats
+
+    local robots = Instance.new("IntValue")
+    robots.Name = "Robots"
+    robots.Value = 0
+    robots.Parent = leaderstats
+
+    print("✅ Player", player.Name, "initialized with starting resources")
+end
+
+-- Spawn a robot model in the world
+local function spawnRobotModel(robotData, player)
+    local config = robotTypes[robotData.Type] or robotTypes.Basic
+
+    -- Create robot folder
+    local robotFolder = Instance.new("Folder")
+    robotFolder.Name = robotData.Name .. "_" .. robotData.UniqueId:sub(1, 8)
+    robotFolder.Parent = workspace
+
+    -- Create robot body (more compact and cubic like Wall-E)
+    local robotBody = Instance.new("Part")
+    robotBody.Name = "RobotBody"
+    robotBody.Size = Vector3.new(config.Size.X * 1.2, config.Size.Y * 0.8, config.Size.Z * 1.2)  -- Wider, shorter
+    robotBody.Material = Enum.Material.Metal
+    robotBody.Color = Color3.fromRGB(139, 119, 101)  -- Wall-E's rusty color
+    robotBody.Anchored = false
+    robotBody.CanCollide = true
+    robotBody.Parent = robotFolder
+
+    -- Position robot near spawn platform
+    local spawnAngle = math.random(1, 360)
+    local spawnDistance = math.random(3, 8)
+    local spawnPosition = Vector3.new(
+        math.cos(math.rad(spawnAngle)) * spawnDistance,
+        5,
+        math.sin(math.rad(spawnAngle)) * spawnDistance
+    )
+    robotBody.Position = spawnPosition
+
+    -- Create robot head (smaller, more proportional)
+    local robotHead = Instance.new("Part")
+    robotHead.Name = "RobotHead"
+    robotHead.Size = Vector3.new(config.Size.X * 0.9, config.Size.Y * 0.4, config.Size.Z * 0.6)
+    robotHead.Material = Enum.Material.Metal
+    robotHead.Color = Color3.fromRGB(139, 119, 101)
+    robotHead.Anchored = false
+    robotHead.CanCollide = false
+    robotHead.Parent = robotFolder
+    robotHead.Position = robotBody.Position + Vector3.new(0, robotBody.Size.Y/2 + robotHead.Size.Y/2, 0)
+
+    -- Create eyes (two glowing parts)
+    local leftEye = Instance.new("Part")
+    leftEye.Name = "LeftEye"
+    leftEye.Size = Vector3.new(0.3, 0.3, 0.1)
+    leftEye.Material = Enum.Material.Neon
+    leftEye.Color = Color3.fromRGB(0, 162, 255)  -- Blue glow
+    leftEye.Shape = Enum.PartType.Ball
+    leftEye.Anchored = false
+    leftEye.CanCollide = false
+    leftEye.Parent = robotFolder
+    leftEye.Position = robotHead.Position + Vector3.new(-0.3, 0, robotHead.Size.Z/2 + 0.05)
+
+    local rightEye = Instance.new("Part")
+    rightEye.Name = "RightEye"
+    rightEye.Size = Vector3.new(0.3, 0.3, 0.1)
+    rightEye.Material = Enum.Material.Neon
+    rightEye.Color = Color3.fromRGB(0, 162, 255)
+    rightEye.Shape = Enum.PartType.Ball
+    rightEye.Anchored = false
+    rightEye.CanCollide = false
+    rightEye.Parent = robotFolder
+    rightEye.Position = robotHead.Position + Vector3.new(0.3, 0, robotHead.Size.Z/2 + 0.05)
+
+    -- Create treads (left and right track)
+    local leftTread = Instance.new("Part")
+    leftTread.Name = "LeftTread"
+    leftTread.Size = Vector3.new(0.3, robotBody.Size.Y * 0.6, robotBody.Size.Z * 1.1)
+    leftTread.Material = Enum.Material.Rubber
+    leftTread.Color = Color3.fromRGB(64, 64, 64)  -- Dark gray treads
+    leftTread.Anchored = false
+    leftTread.CanCollide = false
+    leftTread.Parent = robotFolder
+    leftTread.Position = robotBody.Position + Vector3.new(-robotBody.Size.X/2 - 0.15, -robotBody.Size.Y/4, 0)
+
+    local rightTread = Instance.new("Part")
+    rightTread.Name = "RightTread"
+    rightTread.Size = Vector3.new(0.3, robotBody.Size.Y * 0.6, robotBody.Size.Z * 1.1)
+    rightTread.Material = Enum.Material.Rubber
+    rightTread.Color = Color3.fromRGB(64, 64, 64)
+    rightTread.Anchored = false
+    rightTread.CanCollide = false
+    rightTread.Parent = robotFolder
+    rightTread.Position = robotBody.Position + Vector3.new(robotBody.Size.X/2 + 0.15, -robotBody.Size.Y/4, 0)
+
+    -- Weld all parts together
+    local headWeld = Instance.new("WeldConstraint")
+    headWeld.Part0 = robotBody
+    headWeld.Part1 = robotHead
+    headWeld.Parent = robotBody
+
+    local leftEyeWeld = Instance.new("WeldConstraint")
+    leftEyeWeld.Part0 = robotHead
+    leftEyeWeld.Part1 = leftEye
+    leftEyeWeld.Parent = robotHead
+
+    local rightEyeWeld = Instance.new("WeldConstraint")
+    rightEyeWeld.Part0 = robotHead
+    rightEyeWeld.Part1 = rightEye
+    rightEyeWeld.Parent = robotHead
+
+    local leftTreadWeld = Instance.new("WeldConstraint")
+    leftTreadWeld.Part0 = robotBody
+    leftTreadWeld.Part1 = leftTread
+    leftTreadWeld.Parent = robotBody
+
+    local rightTreadWeld = Instance.new("WeldConstraint")
+    rightTreadWeld.Part0 = robotBody
+    rightTreadWeld.Part1 = rightTread
+    rightTreadWeld.Parent = robotBody
+
+    -- Add movement components - only use BodyPosition for stable robot movement
+    local bodyPosition = Instance.new("BodyPosition")
+    -- Increase force significantly for multi-part robot
+    local baseForce = 20000  -- Increased for complex robot assembly
+    bodyPosition.MaxForce = Vector3.new(baseForce, baseForce, baseForce)
+    bodyPosition.Position = robotBody.Position
+    bodyPosition.D = 2000   -- Higher damping for complex assembly
+    bodyPosition.P = 8000   -- Higher power to move multi-part robot
+    bodyPosition.Parent = robotBody
+
+    -- Note: Removed BodyAngularVelocity to prevent physics conflicts with BodyPosition
+
+    -- Store robot data
+    local ownerValue = Instance.new("ObjectValue")
+    ownerValue.Name = "Owner"
+    ownerValue.Value = player
+    ownerValue.Parent = robotFolder
+
+    local robotState = Instance.new("StringValue")
+    robotState.Name = "RobotState"
+    robotState.Value = "auto_mining"
+    robotState.Parent = robotFolder
+
+    local uniqueIdValue = Instance.new("StringValue")
+    uniqueIdValue.Name = "UniqueId"
+    uniqueIdValue.Value = robotData.UniqueId
+    uniqueIdValue.Parent = robotFolder
+
+    -- Add name tag
+    local billboard = Instance.new("BillboardGui")
+    billboard.Size = UDim2.new(0, 200, 0, 50)
+    billboard.Adornee = robotHead
+    billboard.Parent = workspace
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, 0, 1, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = config.Name .. " (" .. config.Rarity .. ")"
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.TextScaled = true
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.Parent = billboard
+
+    print("✨ Robot", config.Name, "spawned for", player.Name)
+    return robotFolder
+end
+
+-- Handle robot hatching
+hatchRobotEvent.OnServerEvent:Connect(function(player, robotType, amount)
+    local data = playerData[player.UserId]
+    if not data then return end
+
+    robotType = robotType or "Basic"
+    amount = amount or 1
+
+    local config = robotTypes[robotType]
+    if not config then
+        print("❌ Invalid robot type:", robotType)
+        return
+    end
+
+    -- Check if player has enough of each required currency
+    for currencyType, cost in pairs(config.Cost) do
+        local totalCost = cost * amount
+        local playerAmount = data.Currency[currencyType] or 0
+        if playerAmount < totalCost then
+            print("❌ Player", player.Name, "cannot afford", amount, robotType, "robots (need", totalCost, currencyType, ")")
+            return
+        end
+    end
+
+    -- Deduct costs for all required currencies
+    for currencyType, cost in pairs(config.Cost) do
+        local totalCost = cost * amount
+        data.Currency[currencyType] = data.Currency[currencyType] - totalCost
+    end
+
+    -- Create robots
+    for i = 1, amount do
+        local newRobot = {
+            Type = robotType,
+            Name = config.Name,
+            Rarity = config.Rarity,
+            Level = 1,
+            UniqueId = game:GetService("HttpService"):GenerateGUID()
+        }
+
+        table.insert(data.Robots, newRobot)
+        spawnRobotModel(newRobot, player)
+    end
+
+    -- Update leaderstats
+    local leaderstats = player:FindFirstChild("leaderstats")
+    if leaderstats then
+        local gearbitsStat = leaderstats:FindFirstChild("Gearbits")
+        local ionStat = leaderstats:FindFirstChild("IonShards")
+        local metalStat = leaderstats:FindFirstChild("RareMetals")
+        local crystalStat = leaderstats:FindFirstChild("Crystals")
+        local robotsStat = leaderstats:FindFirstChild("Robots")
+
+        if gearbitsStat then gearbitsStat.Value = data.Currency.Gearbits end
+        if ionStat then ionStat.Value = data.Currency.IonShards end
+        if metalStat then metalStat.Value = data.Currency.RareMetals end
+        if crystalStat then crystalStat.Value = data.Currency.Crystals end
+        if robotsStat then robotsStat.Value = #data.Robots end
+    end
+
+    print("✅ Player", player.Name, "hatched", amount, robotType, "robots")
+end)
+
+-- Handle robot state changes
+setRobotStateEvent.OnServerEvent:Connect(function(player, robotId, newState)
+    print("🔧 Setting robot", robotId, "to state", newState, "for", player.Name)
+
+    -- Find robot in workspace
+    for _, obj in pairs(workspace:GetChildren()) do
+        if obj:IsA("Folder") and obj.Name:find(robotId) then
+            local owner = obj:FindFirstChild("Owner")
+            if owner and owner.Value == player then
+                local robotState = obj:FindFirstChild("RobotState")
+                if robotState then
+                    robotState.Value = newState
+                    print("✅ Robot", obj.Name, "state changed to", newState)
+                end
+                break
+            end
+        end
+    end
+end)
+
+-- Handle manual robot-to-resource assignment
+assignRobotToResourceEvent.OnServerEvent:Connect(function(player, robotId, resourceNode)
+    print("🎯 Assigning robot", robotId, "to resource", resourceNode.Name, "for", player.Name)
+
+    -- Find robot in workspace
+    for _, obj in pairs(workspace:GetChildren()) do
+        if obj:IsA("Folder") and obj.Name:find(robotId) then
+            local owner = obj:FindFirstChild("Owner")
+            if owner and owner.Value == player then
+                -- Set the target resource directly
+                local targetResourceValue = obj:FindFirstChild("TargetResource")
+                if not targetResourceValue then
+                    targetResourceValue = Instance.new("ObjectValue")
+                    targetResourceValue.Name = "TargetResource"
+                    targetResourceValue.Parent = obj
+                end
+                targetResourceValue.Value = resourceNode
+                print("✅ Robot", obj.Name, "assigned to resource", resourceNode.Name)
+                break
+            end
+        end
+    end
+end)
+
+-- Handle manual mining
+manualMineEvent.OnServerEvent:Connect(function(player, resourceNode)
+    local data = playerData[player.UserId]
+    if not data then return end
+
+    -- Verify the resource node exists and has a ResourceType
+    if not resourceNode or not resourceNode:FindFirstChild("ResourceType") then
+        return
+    end
+
+    -- Check distance - player must be close to mine (within 10 studs)
+    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        local distance = (player.Character.HumanoidRootPart.Position - resourceNode.Position).Magnitude
+        if distance > 10 then
+            print("❌ Player", player.Name, "too far from resource (", math.floor(distance), "studs)")
+            return
+        end
+    end
+
+    local resourceType = resourceNode.ResourceType.Value
+    local gainAmount = 0
+    local resourceName = ""
+
+    -- Determine reward based on resource type
+    if resourceType == "Gearbit" then
+        gainAmount = math.random(2, 5)  -- 2-5 gearbits per click
+        data.Currency.Gearbits = data.Currency.Gearbits + gainAmount
+        resourceName = "⚙️ Gearbits"
+    elseif resourceType == "Ion Shard" then
+        gainAmount = math.random(1, 3)  -- 1-3 ion shards per click
+        data.Currency.IonShards = data.Currency.IonShards + gainAmount
+        resourceName = "⚡ Ion Shards"
+    elseif resourceType == "Rare Metal" then
+        gainAmount = math.random(1, 2)  -- 1-2 rare metals per click
+        data.Currency.RareMetals = data.Currency.RareMetals + gainAmount
+        resourceName = "🥇 Rare Metals"
+    elseif resourceType == "Crystal" then
+        gainAmount = math.random(1, 1)  -- 1 crystal per click (rare)
+        data.Currency.Crystals = data.Currency.Crystals + gainAmount
+        resourceName = "💎 Crystals"
+    end
+
+    -- Deplete resource health and shrink it
+    local healthValue = resourceNode:FindFirstChild("ResourceHealth")
+    local originalSizeValue = resourceNode:FindFirstChild("OriginalSize")
+
+    if healthValue and originalSizeValue then
+        healthValue.Value = healthValue.Value - 1
+
+        -- Calculate new size based on remaining health
+        local healthPercent = healthValue.Value / (originalSizeValue.Value * 3)
+        if healthPercent > 0 then
+            local newSize = originalSizeValue.Value * healthPercent
+            resourceNode.Size = Vector3.new(newSize, newSize, newSize)
+            -- Keep Y position fixed at original position to prevent robot teleporting
+            -- resourceNode.Position = Vector3.new(resourceNode.Position.X, newSize / 2, resourceNode.Position.Z)
+            print("🔹 Resource shrunk to", math.floor(healthPercent * 100) .. "% size")
+        else
+            -- Resource depleted - remove it
+            resourceNode:Destroy()
+            print("💀 Resource depleted and removed")
+        end
+    end
+
+    -- Update leaderstats
+    local leaderstats = player:FindFirstChild("leaderstats")
+    if leaderstats then
+        local gearbitsStat = leaderstats:FindFirstChild("Gearbits")
+        local ionStat = leaderstats:FindFirstChild("IonShards")
+        local metalStat = leaderstats:FindFirstChild("RareMetals")
+        local crystalStat = leaderstats:FindFirstChild("Crystals")
+
+        if gearbitsStat then gearbitsStat.Value = data.Currency.Gearbits end
+        if ionStat then ionStat.Value = data.Currency.IonShards end
+        if metalStat then metalStat.Value = data.Currency.RareMetals end
+        if crystalStat then crystalStat.Value = data.Currency.Crystals end
+    end
+
+    print("⛏️", player.Name, "manually mined", gainAmount, resourceName)
+end)
+
+-- Auto-resource generation for idle gameplay
+local function autoGenerateResources()
+    for _, player in pairs(Players:GetPlayers()) do
+        local data = playerData[player.UserId]
+        if not data then continue end
+
+        -- Count auto-mining robots
+        local autoMiningCount = 0
+        for _, obj in pairs(workspace:GetChildren()) do
+            if obj:IsA("Folder") and obj.Name:find("_") then
+                local owner = obj:FindFirstChild("Owner")
+                local robotState = obj:FindFirstChild("RobotState")
+                if owner and owner.Value == player and robotState and robotState.Value == "auto_mining" then
+                    autoMiningCount = autoMiningCount + 1
+                end
+            end
+        end
+
+        if autoMiningCount > 0 then
+            local gearbitGain = autoMiningCount * math.random(10, 25)
+            local ionGain = autoMiningCount * math.random(2, 5)
+            local metalGain = autoMiningCount > 3 and math.random(0, 2) or 0
+
+            data.Currency.Gearbits = data.Currency.Gearbits + gearbitGain
+            data.Currency.IonShards = data.Currency.IonShards + ionGain
+            data.Currency.RareMetals = data.Currency.RareMetals + metalGain
+
+            -- Update leaderstats
+            local leaderstats = player:FindFirstChild("leaderstats")
+            if leaderstats then
+                local gearbitsStat = leaderstats:FindFirstChild("Gearbits")
+                local ionStat = leaderstats:FindFirstChild("IonShards")
+                local metalStat = leaderstats:FindFirstChild("RareMetals")
+                local crystalStat = leaderstats:FindFirstChild("Crystals")
+
+                if gearbitsStat then gearbitsStat.Value = data.Currency.Gearbits end
+                if ionStat then ionStat.Value = data.Currency.IonShards end
+                if metalStat then metalStat.Value = data.Currency.RareMetals end
+                if crystalStat then crystalStat.Value = data.Currency.Crystals end
+            end
+
+            print("💰", player.Name, "earned", gearbitGain, "⚙️,", ionGain, "⚡,", metalGain, "🥇 from", autoMiningCount, "robots")
+        end
+    end
+end
+
+-- Mining zones configuration
+local miningZones = {
+    {name = "Basic Mining Zone", pos = Vector3.new(30, 1, 0), resource = "Gearbits"},
+    {name = "Advanced Mining Zone", pos = Vector3.new(-30, 1, 0), resource = "IonShards"},
+    {name = "Elite Mining Zone", pos = Vector3.new(0, 1, 30), resource = "IonShards"},
+    {name = "Rare Metal Deposit", pos = Vector3.new(0, 1, -30), resource = "RareMetals"}
+}
+
+-- Helper function to find nearest resource node for robots
+local function findNearestResource(robotPosition, maxDistance)
+    local nearestResource = nil
+    local nearestDistance = maxDistance or 100
+
+    for _, obj in pairs(workspace:GetChildren()) do
+        if obj.Name:find("Resource_") and obj:IsA("BasePart") then
+            local distance = (obj.Position - robotPosition).Magnitude
+            if distance < nearestDistance then
+                nearestDistance = distance
+                nearestResource = obj
+            end
+        end
+    end
+
+    return nearestResource, nearestDistance
+end
+
+-- Robot AI Movement System
+local function updateRobotMovement()
+    local robotCount = 0
+    local movingRobots = 0
+
+    for _, obj in pairs(workspace:GetChildren()) do
+        if obj:IsA("Folder") and obj.Name:find("_") then
+            local owner = obj:FindFirstChild("Owner")
+            local robotState = obj:FindFirstChild("RobotState")
+            local robotBody = obj:FindFirstChild("RobotBody")
+            local robotHead = obj:FindFirstChild("RobotHead")
+
+            if owner and robotState and robotBody then
+                robotCount = robotCount + 1
+                local bodyPosition = robotBody:FindFirstChild("BodyPosition")
+
+                if bodyPosition then
+                    if robotState.Value == "following" then
+                        -- Follow the player
+                        local player = owner.Value
+                        if player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                            local playerPos = player.Character.HumanoidRootPart.Position
+                            local followPos = playerPos + Vector3.new(
+                                math.random(-8, 8),
+                                0,
+                                math.random(-8, 8)
+                            )
+                            -- Ensure robot stays at proper height (platform is at Y=4, robots should be at Y=5)
+                            followPos = Vector3.new(followPos.X, 5, followPos.Z)
+                            bodyPosition.Position = followPos
+                            movingRobots = movingRobots + 1
+                        end
+                    elseif robotState.Value == "auto_mining" then
+                        local currentPos = robotBody.Position
+
+                        -- Check if robot already has a target resource
+                        local targetResourceValue = obj:FindFirstChild("TargetResource")
+                        local targetResource = nil
+
+                        if targetResourceValue and targetResourceValue.Value and targetResourceValue.Value.Parent then
+                            -- Use existing target if it still exists
+                            targetResource = targetResourceValue.Value
+                        else
+                            -- Find new nearest resource node for mining
+                            targetResource = findNearestResource(currentPos, 60)
+
+                            -- If no resources found nearby, look for any resource
+                            if not targetResource then
+                                targetResource = findNearestResource(currentPos, 200)
+                            end
+
+                            -- Store the new target
+                            if targetResource then
+                                if not targetResourceValue then
+                                    targetResourceValue = Instance.new("ObjectValue")
+                                    targetResourceValue.Name = "TargetResource"
+                                    targetResourceValue.Parent = obj
+                                end
+                                targetResourceValue.Value = targetResource
+                            end
+                        end
+
+                        if targetResource then
+                            local resourcePos = targetResource.Position
+                            -- Calculate distance only in X and Z (ignore Y difference between robot and resource)
+                            local distance = math.sqrt((currentPos.X - resourcePos.X)^2 + (currentPos.Z - resourcePos.Z)^2)
+
+                            if distance > 5 then
+                                -- Move toward resource with proper Y positioning
+                                local moveToPos = Vector3.new(resourcePos.X, 5, resourcePos.Z)
+                                bodyPosition.Position = moveToPos
+
+                                -- Get robot type for proper force scaling
+                                local ownerValue = obj:FindFirstChild("Owner")
+                                local robotType = "Basic" -- Default
+                                if ownerValue and ownerValue.Value then
+                                    local player = ownerValue.Value
+                                    local data = playerData[player.UserId]
+                                    if data then
+                                        for _, robotData in ipairs(data.Robots) do
+                                            if robotData.UniqueId:sub(1, 8) == obj.Name:match("{(.-)") then
+                                                robotType = robotData.Type
+                                                break
+                                            end
+                                        end
+                                    end
+                                end
+
+                                -- Apply stable robot movement - reduced forces to prevent physics breaking
+                                local baseForce = 4000  -- Fixed force, no multiplier to prevent escalation
+
+                                bodyPosition.MaxForce = Vector3.new(baseForce, baseForce, baseForce)
+                                bodyPosition.P = 3000  -- Reduced power for stability
+                                bodyPosition.D = 1000  -- Moderate damping
+
+                                -- Set target position directly (BodyPosition handles movement)
+                                bodyPosition.Position = moveToPos
+
+                                -- Debug: Show current and target positions with force info
+                                print("🔧 Robot", obj.Name, "(" .. robotType .. ") current:", math.floor(currentPos.X), math.floor(currentPos.Z),
+                                      "target:", math.floor(resourcePos.X), math.floor(resourcePos.Z), "dist:", math.floor(distance),
+                                      "force:", math.floor(baseForce))
+
+                                -- Travel animation - change head color to show movement
+                                if robotHead then
+                                    -- Change head color to blue when traveling
+                                    robotHead.Color = Color3.fromRGB(0, 150, 255)
+
+                                    -- Don't move the head - it's welded to the body
+                                    -- The movement effect comes from the robot body physics
+                                end
+
+                                print("⛏️ Robot", obj.Name, "traveling to resource", targetResource.Name, "distance:", math.floor(distance))
+                            else
+                                -- At resource node - perform mining operations
+                                bodyPosition.Position = Vector3.new(resourcePos.X, 5, resourcePos.Z)
+                                bodyPosition.MaxForce = Vector3.new(20000, 20000, 20000)
+
+                                -- Create or update mining drill
+                                local drill = obj:FindFirstChild("MiningDrill")
+                                if not drill then
+                                    drill = Instance.new("Part")
+                                    drill.Name = "MiningDrill"
+                                    drill.Size = Vector3.new(0.3, 2, 0.3)
+                                    drill.Material = Enum.Material.Metal
+                                    drill.Color = Color3.fromRGB(120, 120, 120)
+                                    drill.CanCollide = false
+                                    drill.Parent = obj
+
+                                    -- Weld drill to robot body
+                                    local drillWeld = Instance.new("WeldConstraint")
+                                    drillWeld.Part0 = robotBody
+                                    drillWeld.Part1 = drill
+                                    drillWeld.Parent = drill
+                                end
+
+                                -- Animate the drill and robot
+                                local time = tick() * 8
+                                local miningBob = math.sin(time) * 0.8
+                                local drillRotation = time * 10
+
+                                -- Position drill below robot
+                                drill.CFrame = robotBody.CFrame * CFrame.new(0, -robotBody.Size.Y/2 - 0.5, 0) *
+                                             CFrame.Angles(0, math.rad(drillRotation), 0) *
+                                             CFrame.new(0, miningBob, 0)
+
+                                -- Robot head mining animation
+                                if robotHead then
+                                    -- Change head color to yellow when mining
+                                    robotHead.Color = Color3.fromRGB(255, 255, 0)
+
+                                    -- Don't move the head - it's welded to the body
+                                    -- The bobbing effect will come from the robot body movement
+                                end
+
+                                -- Create mining sparks effect
+                                if math.random(1, 10) == 1 then -- 10% chance per update
+                                    local spark = Instance.new("Part")
+                                    spark.Name = "MiningSpark"
+                                    spark.Size = Vector3.new(0.2, 0.2, 0.2)
+                                    spark.Position = drill.Position + Vector3.new(
+                                        math.random(-1, 1),
+                                        math.random(-0.5, 0.5),
+                                        math.random(-1, 1)
+                                    )
+                                    spark.Anchored = true
+                                    spark.CanCollide = false
+                                    spark.Material = Enum.Material.Neon
+                                    spark.Color = Color3.fromRGB(255, 180, 0)
+                                    spark.Parent = workspace
+
+                                    -- Animate spark movement
+                                    task.spawn(function()
+                                        local startPos = spark.Position
+                                        for i = 1, 10 do
+                                            spark.Position = startPos + Vector3.new(
+                                                math.random(-2, 2) * i * 0.1,
+                                                math.random(0, 1) * i * 0.1,
+                                                math.random(-2, 2) * i * 0.1
+                                            )
+                                            spark.Transparency = i * 0.1
+                                            task.wait(0.05)
+                                        end
+                                        if spark and spark.Parent then
+                                            spark:Destroy()
+                                        end
+                                    end)
+                                end
+
+                                -- Actually mine the resource node
+                                if math.random(1, 30) == 1 then -- 3.3% chance per update to mine
+                                    local resourceHealth = targetResource:FindFirstChild("ResourceHealth")
+                                    local originalSize = targetResource:FindFirstChild("OriginalSize")
+                                    local resourceType = targetResource:FindFirstChild("ResourceType")
+
+                                    if resourceHealth and originalSize and resourceType then
+                                        -- Damage the resource
+                                        resourceHealth.Value = resourceHealth.Value - 1
+
+                                        -- Give reward to robot owner
+                                        local owner = obj:FindFirstChild("Owner")
+                                        if owner and owner.Value then
+                                            local player = owner.Value
+                                            local data = playerData[player.UserId]
+                                            if data then
+                                                local resourceName = resourceType.Value
+                                                if resourceName == "Gearbit" then
+                                                    data.Currency.Gearbits = data.Currency.Gearbits + math.random(8, 20)
+                                                elseif resourceName == "Ion Shard" then
+                                                    data.Currency.IonShards = data.Currency.IonShards + math.random(2, 4)
+                                                elseif resourceName == "Rare Metal" then
+                                                    data.Currency.RareMetals = data.Currency.RareMetals + math.random(1, 2)
+                                                elseif resourceName == "Crystal" then
+                                                    data.Currency.Crystals = data.Currency.Crystals + 1
+                                                end
+
+                                                -- Update leaderstats
+                                                if player.leaderstats then
+                                                    if player.leaderstats.Gearbits then
+                                                        player.leaderstats.Gearbits.Value = data.Currency.Gearbits
+                                                    end
+                                                    if player.leaderstats.IonShards then
+                                                        player.leaderstats.IonShards.Value = data.Currency.IonShards
+                                                    end
+                                                    if player.leaderstats.RareMetals then
+                                                        player.leaderstats.RareMetals.Value = data.Currency.RareMetals
+                                                    end
+                                                    if player.leaderstats.Crystals then
+                                                        player.leaderstats.Crystals.Value = data.Currency.Crystals
+                                                    end
+                                                end
+                                            end
+                                        end
+
+                                        -- Shrink or destroy resource
+                                        if resourceHealth.Value <= 0 then
+                                            -- Clear this resource from all robot targets before destroying
+                                            for _, robotFolder in pairs(workspace:GetChildren()) do
+                                                if robotFolder.Name:find("Robot_") and robotFolder:FindFirstChild("TargetResource") then
+                                                    local targetResourceValue = robotFolder.TargetResource
+                                                    if targetResourceValue.Value == targetResource then
+                                                        targetResourceValue.Value = nil
+                                                        print("🔄 Cleared target for robot", robotFolder.Name)
+                                                    end
+                                                end
+                                            end
+
+                                            targetResource:Destroy()
+                                            print("🔹 Robot", obj.Name, "depleted resource", targetResource.Name)
+                                        else
+                                            local healthPercent = resourceHealth.Value / (originalSize.Value * 3)
+                                            local newSize = originalSize.Value * healthPercent
+                                            targetResource.Size = Vector3.new(newSize, newSize, newSize)
+                                            -- Keep Y position fixed at original position to prevent robot teleporting
+                                            -- targetResource.Position = Vector3.new(targetResource.Position.X, newSize / 2, targetResource.Position.Z)
+                                        end
+                                    end
+                                end
+
+                                print("⛏️ Robot", obj.Name, "mining resource", targetResource.Name)
+                            end
+                        else
+                            -- No resource found - wander randomly or wait for resources to respawn
+                            if math.random(1, 200) == 1 then -- Occasionally move randomly
+                                local randomPos = Vector3.new(
+                                    math.random(-40, 40),
+                                    5,
+                                    math.random(-40, 40)
+                                )
+                                bodyPosition.Position = randomPos
+                                print("🤖 Robot", obj.Name, "wandering - no resources found")
+                            end
+                        end
+
+                        movingRobots = movingRobots + 1
+                    end
+                else
+                    print("❌ Robot", obj.Name, "missing BodyPosition or BodyVelocity")
+                end
+            end
+        end
+    end
+
+    if robotCount > 0 then
+        print("🔧 Movement update:", movingRobots, "of", robotCount, "robots processed")
+    end
+end
+
+-- Set up auto-generation and robot movement (every 2 seconds)
+task.spawn(function()
+    while true do
+        task.wait(2)
+        updateRobotMovement()
+    end
+end)
+
+-- Set up auto-generation (every 5 seconds)
+-- Disabled auto-generation - robots now mine actual resources
+-- task.spawn(function()
+--     while true do
+--         task.wait(5)
+--         autoGenerateResources()
+--     end
+-- end)
+
+-- Value-based resource respawn system
+local function spawnValueBasedResource()
+    -- Count existing resources by type
+    local resourceCounts = {Gearbit = 0, ["Ion Shard"] = 0, ["Rare Metal"] = 0, Crystal = 0}
+    for _, obj in pairs(workspace:GetChildren()) do
+        if obj.Name:find("Resource_") then
+            local resourceType = obj:FindFirstChild("ResourceType")
+            if resourceType then
+                resourceCounts[resourceType.Value] = resourceCounts[resourceType.Value] + 1
+            end
+        end
+    end
+
+    -- Target counts based on resource value (more valuable = fewer spawns)
+    local targetCounts = {
+        Gearbit = 12,     -- Most common (50% yield)
+        ["Ion Shard"] = 8,  -- Common (35% yield)
+        ["Rare Metal"] = 4, -- Uncommon (15% yield)
+        Crystal = 1        -- Rare (5% yield)
+    }
+
+    -- Resource spawn data with rarity weights
+    local resourceTypes = {
+        {Color3.fromRGB(0, 212, 255), "Gearbit", 60},       -- 60% chance
+        {Color3.fromRGB(150, 0, 255), "Ion Shard", 25},     -- 25% chance
+        {Color3.fromRGB(255, 215, 0), "Rare Metal", 12},    -- 12% chance
+        {Color3.fromRGB(255, 255, 255), "Crystal", 3}       -- 3% chance (White)
+    }
+
+    -- Try to spawn each resource type if below target
+    for resourceName, targetCount in pairs(targetCounts) do
+        if resourceCounts[resourceName] < targetCount then
+            -- Find the resource data for this type
+            local resourceData = nil
+            for _, data in ipairs(resourceTypes) do
+                if data[2] == resourceName then
+                    resourceData = data
+                    break
+                end
+            end
+
+            if resourceData then
+                local resource = Instance.new("Part")
+                resource.Name = "Resource_" .. math.random(1000, 9999)
+
+                -- Vary resource sizes (small, medium, large)
+                local sizeVariants = {1.2, 1.5, 1.8}
+                local resourceSize = sizeVariants[math.random(1, #sizeVariants)]
+                resource.Size = Vector3.new(resourceSize, resourceSize, resourceSize)
+                resource.Shape = Enum.PartType.Ball
+                resource.Material = Enum.Material.Neon
+                resource.Color = resourceData[1]
+
+                -- Random position
+                local angle = math.random(1, 360)
+                local distance = math.random(15, 45)
+                resource.Position = Vector3.new(
+                    math.cos(math.rad(angle)) * distance,
+                    resourceSize / 2,
+                    math.sin(math.rad(angle)) * distance
+                )
+                resource.Anchored = true
+                resource.Parent = workspace
+
+                -- Add resource data
+                local stringValue = Instance.new("StringValue")
+                stringValue.Name = "ResourceType"
+                stringValue.Value = resourceData[2]
+                stringValue.Parent = resource
+
+                local healthValue = Instance.new("IntValue")
+                healthValue.Name = "ResourceHealth"
+                healthValue.Value = math.floor(resourceSize * 3)
+                healthValue.Parent = resource
+
+                local originalSizeValue = Instance.new("NumberValue")
+                originalSizeValue.Name = "OriginalSize"
+                originalSizeValue.Value = resourceSize
+                originalSizeValue.Parent = resource
+
+                print("🌱 Spawned", resourceData[2], "resource (", resourceCounts[resourceName] + 1, "/", targetCount, ")")
+            end
+        end
+    end
+end
+
+-- Different spawn intervals for different resource values
+task.spawn(function()
+    while true do
+        task.wait(15)  -- Check every 15 seconds for common resources
+        spawnValueBasedResource()
+    end
+end)
+
+-- Handle player connections
+Players.PlayerAdded:Connect(initializePlayer)
+
+-- Initialize existing players
+for _, player in pairs(Players:GetPlayers()) do
+    initializePlayer(player)
+end
+
+-- Workspace setup is handled by workspace-setup.server.luau
+
+print("🎮 Robot Collectors server initialized! v3.1-SYNC-TEST (2025-09-27 22:05)")

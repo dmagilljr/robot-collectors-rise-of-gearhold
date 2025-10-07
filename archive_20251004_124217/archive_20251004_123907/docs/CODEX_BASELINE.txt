@@ -1,0 +1,91 @@
+# CODEX_BASELINE.txt
+# Robot Collectors: Rise of Gearhold — Codex Baseline
+# Purpose: Persistent rules Codex must follow for ALL edits.
+
+========================================
+PROJECT LAYOUT & MAPPING (Rojo 7.5.1)
+========================================
+- src/server/           -> ServerScriptService/Server
+- src/server_modules/   -> ServerScriptService/Modules
+- src/client/           -> StarterPlayer/StarterPlayerScripts
+- src/shared/config/    -> ReplicatedStorage/Shared/config
+- ReplicatedStorage/Remotes (if present) -> src/shared/remotes
+
+default.project.json MUST mount the above paths. Do not move or rename folders.
+
+========================================
+CODING RULES (Luau)
+========================================
+- Use --!strict. No globals. Prefer local.
+- Use task.wait() (never wait()).
+- Keep existing RemoteEvents names/locations stable.
+- Small, focused diffs. Preserve formatting and comments.
+- Add concise comments where behavior changes.
+
+========================================
+SOURCE OF TRUTH: CONSTANTS
+========================================
+- Centralize loop timing and economy in:
+  src/shared/config/GameConstants.luau
+- REQUIRED KEYS (create/merge; don’t remove other fields):
+  GameConstants = {
+    MOVEMENT_TICK = 0.1,     -- seconds
+    MINING_TICK   = 0.8,     -- seconds (the only mining cadence)
+    CENTER_POS    = Vector3.new(0,0,0),
+    BOUNDARY_RADIUS = 50,
+    GEARBITS_PER_TICK   = {min=10, max=25},
+    IONSHARDS_PER_TICK  = {min=2,  max=5},
+    RAREMETALS_PER_TICK = {min=0,  max=2} -- gated by team-size logic
+  }
+- Replace ALL hard-coded waits/rates elsewhere with these constants.
+
+========================================
+ROBOT MANAGER EXPECTATIONS
+========================================
+- Require constants from ReplicatedStorage/Shared/config/GameConstants.
+- Mining loop yields by MINING_TICK; movement by MOVEMENT_TICK.
+- Clamp robots to XZ radius, keep Y stable (hover). Ignore Y in distance.
+- Award resources using *_PER_TICK ranges.
+- Optional Studio-only debug (RunService:IsStudio()) is allowed.
+
+========================================
+SERVER ENTRY EXPECTATIONS
+========================================
+- init.server.luau requires GameConstants once (fail-fast if mapping breaks).
+- No production spam logs; Studio-only prints allowed.
+
+========================================
+DOCS CONSISTENCY
+========================================
+- README/docs must reference GameConstants for timing (“Auto-mining = 0.8s; see GameConstants.luau”).
+- No duplicated numbers in docs or code.
+
+========================================
+SAFE-EDIT POLICY (what Codex MUST do)
+========================================
+- If the target text already matches, do nothing.
+- Only modify the minimal lines needed.
+- Never rename files/paths/APIs unless explicitly instructed in the task.
+- Keep public behavior stable.
+
+========================================
+REFERENCE DOCUMENTS
+========================================
+These docs live under /docs/ or Google Drive and should be considered the design source of truth:
+
+- README.md → high-level overview of the game, robot loop, Rojo layout
+- SETUP_GUIDE.md → how to run and test the project with Rojo 7.5.1
+- AGENTS.md → coding style, module organization, vision/milestones
+- CLAUDE.md → detailed architecture of Robot/Player/Remote managers, physics guardrails
+- Competitive Analysis PDF → monetization + gameplay reference against top Roblox games
+
+Codex must not overwrite or ignore these documents.
+When code edits conflict with a doc, prefer consistency with the doc or add a TODO comment to reconcile.
+
+========================================
+POST-EDIT QUICK CHECK (manual)
+========================================
+1) rojo serve --port 34877
+2) Studio -> connect to localhost:34877 -> Play
+3) Expect: “[RobotCollectors] Server init OK; constants loaded”
+4) Mining updates ~every 0.8s; movement ~0.1s; robots stay within boundary.
