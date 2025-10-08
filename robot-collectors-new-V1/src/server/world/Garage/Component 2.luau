@@ -48,9 +48,6 @@ end
 
 local Garage = {}
 
--- Feature toggles
-local ENABLE_MANUAL_TOGGLE = false  -- when false, no ProximityPrompt is created
-
 export type Spec = { origin: Vector3, width: number, height: number, depth: number, facing: Vector3 }
 
 function Garage.Mount(spec: Spec): () -> ()
@@ -169,38 +166,6 @@ function Garage.Mount(spec: Spec): () -> ()
 		basis(center + r * ( panelW * 0.5) + inw * (DOOR_BEHIND + 0.02)),
 		{ Material = Enum.Material.Metal, Color = Color3.fromRGB(200,210,225), CanCollide = true }
 	)
-	-- Publish DoorCenter / DoorFacing and initialize model door state
-	root:SetAttribute("DoorCenter", center)
-	root:SetAttribute("DoorFacing", out)
-	if root:GetAttribute("DoorIsOpen") == nil then
-		root:SetAttribute("DoorIsOpen", false)
-	end
-	print(("[GarageV1] DoorCenter=%s DoorFacing=%s"):format(tostring(center), tostring(out)))
-
-	local animate: ((boolean) -> ())? = nil
-
-	-- Single source of truth: model-level DoorIsOpen drives animation
-	root:GetAttributeChangedSignal("DoorIsOpen"):Connect(function()
-		local opening = (root:GetAttribute("DoorIsOpen") == true)
-		-- keep panel attrs in sync for debugging/compatibility
-		leftPanel:SetAttribute("IsOpen", opening)
-		rightPanel:SetAttribute("IsOpen", opening)
-		if animate then
-			animate(opening)
-		else
-			task.defer(function()
-				if animate then
-					animate(opening)
-				end
-			end)
-		end
-	end)
-
-	-- (Legacy path) Left-panel attr still supported, but model attr is authoritative
-	leftPanel:GetAttributeChangedSignal("IsOpen"):Connect(function()
-		local opening = (leftPanel:GetAttribute("IsOpen") == true)
-		root:SetAttribute("DoorIsOpen", opening)
-	end)
 
 	local function frontZ(p: BasePart) return p.CFrame.Position.Z + p.Size.Z*0.5 end
 	local spZ = frontZ(root:FindFirstChild("GD_FrontSpandrelL") :: BasePart)
@@ -219,7 +184,7 @@ function Garage.Mount(spec: Spec): () -> ()
 
 	local animConnL: RBXScriptConnection? = nil
 	local animConnR: RBXScriptConnection? = nil
-	animate = function(opening: boolean)
+	local function animate(opening: boolean)
 		if animConnL then animConnL:Disconnect(); animConnL=nil end
 		if animConnR then animConnR:Disconnect(); animConnR=nil end
 		local startT, endT = opening and 0 or 1, opening and 1 or 0
@@ -241,40 +206,31 @@ function Garage.Mount(spec: Spec): () -> ()
 	end
 
 	local handle = ensure(root, "GD_Handle", Vector3.new(0.5, 1.2, 0.5), basis(center - out * 2), { CanCollide = false, Transparency = 1 })
-	-- Remove any legacy prompts under the handle
 	for _, d in ipairs(handle:GetDescendants()) do
 		if d:IsA("ProximityPrompt") then
 			d:Destroy()
 		end
 	end
-	-- Optional manual toggle (F) — disabled by default; AutoDoorManager drives via attributes
-	if ENABLE_MANUAL_TOGGLE then
-		local pp = Instance.new("ProximityPrompt")
-		pp.ObjectText = "Garage Access"
-		pp.ActionText = "Toggle Door"
-		pp.KeyboardKeyCode = Enum.KeyCode.F
-		pp.HoldDuration = 0
-		pp.MaxActivationDistance = 18
-		pp.RequiresLineOfSight = false
-		pp.Parent = handle
-		pp.Triggered:Connect(function()
-			local opening = (root:GetAttribute("DoorIsOpen") ~= true)
-			root:SetAttribute("DoorIsOpen", opening)
-		end)
-	end
+	local pp = Instance.new("ProximityPrompt")
+	pp.ObjectText = "Garage Access"
+	pp.ActionText = "Toggle Door"
+	pp.KeyboardKeyCode = Enum.KeyCode.F
+	pp.HoldDuration = 0
+	pp.MaxActivationDistance = 18
+	pp.RequiresLineOfSight = false
+	pp.Parent = handle
+	pp.Triggered:Connect(function()
+		local opening = (leftPanel:GetAttribute("IsOpen") ~= true)
+		leftPanel:SetAttribute("IsOpen", opening)
+		rightPanel:SetAttribute("IsOpen", opening)
+		animate(opening)
+	end)
 
 	local function frontZ(part: BasePart)
 		return part.CFrame.Position.Z + part.Size.Z * 0.5
 	end
 	print(("[GarageV1] frontZ: back=%.3f left=%.3f right=%.3f roof=%.3f planeZ=%.3f")
 		:format(frontZ(back), frontZ(leftPart), frontZ(rightPart), frontZ(roof), planeZ))
-
-	-- Mount interior placeholders (hatch, repair, core, console, lockers)
-	local Interior = require(script.Parent.Interior)
-	local function basis(pos: Vector3)
-		return CFrame.fromMatrix(pos, r, u, out)
-	end
-	Interior.Mount(root, {width = spec.width, height = spec.height, depth = spec.depth}, basis, center, r, u, inw, out)
 
 	return function()
 		if root and root.Parent then
