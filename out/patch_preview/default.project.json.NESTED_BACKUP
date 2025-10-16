@@ -1,0 +1,21 @@
+{
+  "$schema": "https://rojo.space/schemas/7.0.0.json",
+  "name": "robot-collectors-new-V1",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "shared": { "$path": "src/shared" }
+    },
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "World":   { "$path": "src/server/world" },
+      "Modules": { "$path": "src/server_modules" },
+      "services": { "$path": "src/server/services" }
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": { "$path": "src/client" }
+    }
+  }
+}

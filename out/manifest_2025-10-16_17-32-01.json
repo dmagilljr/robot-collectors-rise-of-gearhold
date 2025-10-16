@@ -174,13 +174,13 @@
     "ext": ".rbxlx"
   },
   {
-    "path": "robot-collectors-new-V1/.gitignore",
+    "path": ".gitignore",
     "size": 160,
     "sha1": "e37df97276db2585a59431039dbdacd1962c192a",
     "ext": ""
   },
   {
-    "path": "robot-collectors-new-V1/default.project.json",
+    "path": "default.project.json",
     "size": 615,
     "sha1": "c03d30121637fa190a2c9a31ea171bd65bd06820",
     "ext": ".json"
