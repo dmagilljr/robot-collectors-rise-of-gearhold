@@ -5,27 +5,17 @@
     "$className": "DataModel",
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
-      "shared": {
-        "$path": "src/shared"
-      }
+      "shared": { "$path": "src/shared" }
     },
     "ServerScriptService": {
       "$className": "ServerScriptService",
-      "World": {
-        "$path": "src/server/world"
-      },
-      "Modules": {
-        "$path": "src/server_modules"
-      },
-      "services": {
-        "$path": "src/server/services"
-      }
+      "World":   { "$path": "src/server/world" },
+      "Modules": { "$path": "src/server_modules" },
+      "services": { "$path": "src/server/services" }
     },
     "StarterPlayer": {
       "$className": "StarterPlayer",
-      "StarterPlayerScripts": {
-        "$path": "src/client"
-      }
+      "StarterPlayerScripts": { "$path": "src/client" }
     }
   }
 }

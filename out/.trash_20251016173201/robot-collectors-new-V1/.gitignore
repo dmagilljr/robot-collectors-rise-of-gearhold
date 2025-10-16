@@ -1,0 +1,16 @@
+# build & logs
+rojo-*.log
+*.tmp
+*.DS_Store
+
+# Roblox project artifacts
+*.rbxlx.lock
+# VSCode
+.vscode/
+*.rbxlx
+*.rbxlx.lock
+*.gsheet
+* 2
+archive_*/
+/docs/
+/src/

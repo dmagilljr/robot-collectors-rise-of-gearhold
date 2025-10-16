@@ -1,0 +1,28 @@
+# Codex Baseline — Rules of Engagement
+
+## One-file edits + VERIFY
+- Edit **one file** per prompt (or use chunked writes).
+- After every write, **VERIFY**: print absolute path, size, sha256, and head/full content.
+
+### VERIFY template
+```
+# VERIFY
+python3 - <<'PY'
+import os, hashlib
+p = "<file>"
+b = open(p,'rb').read()
+print("ABS:", os.path.abspath(p))
+print("BYTES:", len(b))
+print("SHA256:", hashlib.sha256(b).hexdigest())
+print("--- CONTENT START ---")
+print(b.decode("utf-8","replace"))
+print("--- CONTENT END ---")
+PY
+```
+
+## Pre-launch checklist (garage)
+- `DEV_ALLOW_AUTO_ADOPT=false` (AutoDoorManager).
+- Place published; **Studio Access to API Services** enabled for DS tests.
+- Plots per shard set (12–16); server max (24–30); StreamingEnabled on.
+- Confirm `[AutoDoor] … → OPEN/CLOSE` logs and animation on `DoorIsOpen`.
+

@@ -1,0 +1,26 @@
+src
+├── client
+│   ├── ClickProbe.client.luau
+│   ├── DebugPaverWatch.client.luau
+│   ├── DumpScrap.client.luau
+│   ├── HideResourceOverlays.client.luau
+│   ├── init.client.luau
+│   └── NukeNearDoor.client.luau
+├── server
+│   ├── modules
+│   ├── DumpScrap.server.luau
+│   ├── HideResourceOverlays.server.luau
+│   ├── init.server.luau
+│   ├── RogueGroundKiller.server.luau
+│   ├── RunOnce.server.luau
+│   ├── ScrapHotfix.server.luau
+│   ├── ScrapTerminator.server.luau
+│   └── WatchNewParts.server.luau
+├── ServerScriptService
+│   └── RunOnce.server.luau
+└── shared
+    ├── utils
+    │   └── ResourceGuards.luau
+    └── Hello.luau
+
+7 directories, 17 files

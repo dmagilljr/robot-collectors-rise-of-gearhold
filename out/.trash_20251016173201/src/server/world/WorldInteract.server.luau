@@ -1,0 +1,467 @@
+--!strict
+-- File: WorldInteract.server.luau
+-- v0.6.0-alpha — Click-to-collect + depletion + respawn
+
+local Players = game:GetService("Players")
+local ServerStorage = game:GetService("ServerStorage")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CollectionService = game:GetService("CollectionService")
+
+-- BEGIN safe GameConstants require
+local ok, GC = pcall(function()
+    return require(ReplicatedStorage:WaitForChild("shared"):WaitForChild("config"):WaitForChild("GameConstants"))
+end)
+local GameConstants = (ok and type(GC) == "table") and GC or {
+    DEBUG = false,
+    MIN_GARAGE_RADIUS = 120,
+    THIN_TILE_Y_MAX = 0.12,
+}
+-- END safe GameConstants require
+
+if GameConstants.DEBUG then
+    print("🏗️ WorldInteract.server.luau ACTIVE", os.time())
+end
+
+local shared = ReplicatedStorage:WaitForChild("shared")
+local ResourceDefs = require(shared:WaitForChild("ResourceDefs"))
+local CollectConfig = require(shared:WaitForChild("config"):WaitForChild("CollectConfig"))
+local QuestService = require(game:GetService("ServerScriptService"):WaitForChild("Modules"):WaitForChild("QuestService"))
+
+-- Global feature flag: resources OFF by default
+local RESOURCES_ON = (script:GetAttribute("RESOURCES_ENABLED") == true)
+do
+  local worldAttrSource = game:GetService("ServerScriptService"):FindFirstChild("World")
+  if worldAttrSource and worldAttrSource:GetAttribute("RESOURCES_ENABLED") == true then
+    RESOURCES_ON = true
+  end
+end
+
+local RESOURCE_TAG = "ResourceNode"
+local RESOURCE_TYPE_ATTR = "ResourceType"
+local GARAGE_MODEL_NAME = "GD_Garage"
+local REQUIRE_RESOURCE_TAG = (script:GetAttribute("REQUIRE_RESOURCE_TAG") ~= false)
+
+local remotesFolder = ReplicatedStorage:FindFirstChild("RC_Remotes")
+if not remotesFolder then
+	remotesFolder = Instance.new("Folder")
+	remotesFolder.Name = "RC_Remotes"
+	remotesFolder.Parent = ReplicatedStorage
+end
+
+local function ensureRemote(name: string): RemoteEvent
+	local evt = remotesFolder:FindFirstChild(name)
+	if evt and evt:IsA("RemoteEvent") then
+		return evt
+	end
+	local remote = Instance.new("RemoteEvent")
+	remote.Name = name
+	remote.Parent = remotesFolder
+	return remote
+end
+
+local collectRemote = ensureRemote("CollectResource")
+
+local ServerScriptService = game:GetService("ServerScriptService")
+local servicesFolder = ServerScriptService:WaitForChild("services")
+local resourceServiceScript = servicesFolder:WaitForChild("ResourceService")
+local collectBridge = resourceServiceScript:WaitForChild("CollectRequest") :: BindableEvent
+
+local RC_ServerCollected = ServerStorage:FindFirstChild("RC_ServerCollected") :: BindableEvent?
+
+local COOLDOWN_SEC = 0.35
+
+local DOOR_CENTER = (function()
+	local g = workspace:FindFirstChild("GD_Garage")
+	local v = g and g:GetAttribute("DoorCenter")
+	if typeof(v) == "Vector3" then return v end
+	return GameConstants.GARAGE_DEFAULT_DOOR_CENTER
+end)()
+
+local function _isNearGarage(bp: BasePart): boolean
+	local p = bp.Position
+	return math.abs(p.X) <= 18 and p.Z > -60 and p.Z < -28 and p.Y <= 4
+end
+
+local function _insideGarageRadius(bp: BasePart): boolean
+	local dx = bp.Position.X - DOOR_CENTER.X
+	local dz = bp.Position.Z - DOOR_CENTER.Z
+	return (dx * dx + dz * dz) < (GameConstants.MIN_GARAGE_RADIUS * GameConstants.MIN_GARAGE_RADIUS)
+end
+
+local function inferType(inst: Instance): string
+	-- Only explicit metadata determines resource type (no name-based guesses)
+	local attr = inst:GetAttribute(RESOURCE_TYPE_ATTR)
+	if typeof(attr) == "string" and #attr > 0 then
+		return attr
+	end
+	-- Optional tag pattern: "ResourceType:Scrap"
+	for _, tag in ipairs(CollectionService:GetTags(inst)) do
+		local t = tag:match("ResourceType:(%w+)")
+		if t then return t end
+	end
+	return ""  -- unknown
+end
+
+local function ensureNodeState(node: BasePart, rType: string)
+	local cfg = CollectConfig[rType] or CollectConfig.Scrap
+	if node:GetAttribute("RC_MaxStacks") == nil then
+		node:SetAttribute("RC_MaxStacks", cfg.Stacks)
+	end
+	if node:GetAttribute("RC_StacksLeft") == nil then
+		node:SetAttribute("RC_StacksLeft", cfg.Stacks)
+	end
+	if node:GetAttribute("RC_ScaleMin") == nil then
+		node:SetAttribute("RC_ScaleMin", cfg.ScaleMin)
+	end
+	if node:GetAttribute("RC_BaseSizeX") == nil then
+		node:SetAttribute("RC_BaseSizeX", node.Size.X)
+		node:SetAttribute("RC_BaseSizeY", node.Size.Y)
+		node:SetAttribute("RC_BaseSizeZ", node.Size.Z)
+	end
+	-- If this part uses a SpecialMesh, capture its base Scale for proper shrinking
+	local sm = node:FindFirstChildOfClass("SpecialMesh")
+	if sm and node:GetAttribute("RC_BaseMeshScaleX") == nil then
+		node:SetAttribute("RC_BaseMeshScaleX", sm.Scale.X)
+		node:SetAttribute("RC_BaseMeshScaleY", sm.Scale.Y)
+		node:SetAttribute("RC_BaseMeshScaleZ", sm.Scale.Z)
+	end
+end
+
+local function applyVisual(node: BasePart)
+	local maxStacks = node:GetAttribute("RC_MaxStacks") or 5
+	local stacksLeft = node:GetAttribute("RC_StacksLeft") or maxStacks
+	local scaleMin = node:GetAttribute("RC_ScaleMin") or 0.4
+
+	local t = math.clamp(stacksLeft / math.max(1, maxStacks), 0, 1)
+	local frac = scaleMin + (1 - scaleMin) * t
+
+	-- If this is a MeshPart, scale size directly from base dims (ensures visible shrink)
+	if node:IsA("MeshPart") then
+		local bx = node:GetAttribute("RC_BaseSizeX")
+		local by = node:GetAttribute("RC_BaseSizeY")
+		local bz = node:GetAttribute("RC_BaseSizeZ")
+		if bx and by and bz then
+			node.Size = Vector3.new(bx * frac, by * frac, bz * frac)
+		end
+	end
+
+	-- Prefer scaling SpecialMesh (common for Scrap/Components), else scale Part size
+	local sm = node:FindFirstChildOfClass("SpecialMesh")
+	local bmx = node:GetAttribute("RC_BaseMeshScaleX")
+	local bmy = node:GetAttribute("RC_BaseMeshScaleY")
+	local bmz = node:GetAttribute("RC_BaseMeshScaleZ")
+	if sm and bmx and bmy and bmz then
+		sm.Scale = Vector3.new(bmx * frac, bmy * frac, bmz * frac)
+	else
+		local bx = node:GetAttribute("RC_BaseSizeX")
+		local by = node:GetAttribute("RC_BaseSizeY")
+		local bz = node:GetAttribute("RC_BaseSizeZ")
+		if bx and by and bz then
+			node.Size = Vector3.new(bx * frac, by * frac, bz * frac)
+		end
+	end
+
+	-- Dim the light as the node depletes (uses RC_Light if present)
+	local rcLight = node:FindFirstChild("RC_Light")
+	if rcLight and rcLight:IsA("PointLight") then
+		local base = node:GetAttribute("RC_LightBase")
+		if not base then
+			base = rcLight.Brightness
+			node:SetAttribute("RC_LightBase", base)
+		end
+		rcLight.Brightness = base * (0.5 + 0.5 * frac) -- 50%→100%
+	end
+
+	-- Slight transparency increase as it shrinks (helps readability before 0 stacks)
+	local fade = math.clamp(0.15 + (1 - frac) * 0.35, 0, 0.6)
+
+	if stacksLeft <= 0 then
+		node.CanCollide = false
+		node.Transparency = 1
+		node:SetAttribute("RC_Hidden", true)
+	else
+		node.CanCollide = true
+		node.Transparency = fade
+		node:SetAttribute("RC_Hidden", false)
+	end
+end
+
+local function scheduleRespawn(node: BasePart, rType: string)
+	local cfg = CollectConfig[rType] or CollectConfig.Scrap
+	local delaySec = cfg.RespawnSec or 25
+	node:SetAttribute("RC_RespawnAt", os.clock() + delaySec)
+	task.delay(delaySec, function()
+		if not node or not node.Parent then
+			return
+		end
+		node:SetAttribute("RC_StacksLeft", node:GetAttribute("RC_MaxStacks") or cfg.Stacks)
+		node:SetAttribute("RC_RespawnAt", nil)
+		-- Re-enable interaction on respawn
+		local cd = node:FindFirstChildOfClass("ClickDetector")
+		if cd then cd.MaxActivationDistance = 12 end
+		local prompt = node:FindFirstChildOfClass("ProximityPrompt")
+		if prompt then prompt.Enabled = true end
+		applyVisual(node)
+	end)
+end
+
+local function cooled(node: BasePart): boolean
+	local untilTimestamp = node:GetAttribute("RC_CooldownUntil")
+	return not untilTimestamp or os.clock() >= untilTimestamp
+end
+
+local function setCooldown(node: BasePart, seconds: number)
+	node:SetAttribute("RC_CooldownUntil", os.clock() + seconds)
+end
+
+local function tryCollect(player: Player, node: BasePart, explicitType: string?)
+	if not node or not node:IsDescendantOf(workspace) then
+		return
+	end
+
+	local rType = explicitType or inferType(node)
+	ensureNodeState(node, rType)
+
+	if not cooled(node) then
+		return
+	end
+
+	local stacksLeft = node:GetAttribute("RC_StacksLeft") or 0
+	if stacksLeft <= 0 then
+		return
+	end
+
+	-- Hardened depletion logic
+	local newLeft = stacksLeft - 1
+	node:SetAttribute("RC_StacksLeft", newLeft)
+
+	-- Notify tally systems
+	collectBridge:Fire(player, rType, 1)
+	if RC_ServerCollected then
+		RC_ServerCollected:Fire(player, rType, 1)
+	end
+
+	-- Cooldown per click
+	setCooldown(node, COOLDOWN_SEC)
+
+	-- Apply visuals for the new state
+	applyVisual(node)
+
+	-- If depleted, immediately disable interaction and schedule respawn
+	if newLeft <= 0 then
+		-- Disable Prompt & ClickDetector to prevent further collection until respawn
+		local cd = node:FindFirstChildOfClass("ClickDetector")
+		if cd then cd.MaxActivationDistance = 0 end
+		local prompt = node:FindFirstChildOfClass("ProximityPrompt")
+		if prompt then prompt.Enabled = false end
+
+		-- Ensure fully hidden now (defensive)
+		node.CanCollide = false
+		node.Transparency = 1
+		node:SetAttribute("RC_Hidden", true)
+
+		scheduleRespawn(node, rType)
+		return
+	end
+end
+
+local function attachHandlers(node: BasePart, rType: string)
+	ensureNodeState(node, rType)
+	applyVisual(node)
+
+	-- Apply ResourceDefs visual identity (material/color/light)
+	do
+	    local def = ResourceDefs[rType]
+	    if def then
+	        -- Material & color (non-destructive: only set if provided)
+	        if def.color then
+	            node.Color = def.color
+	        end
+	        if def.materialPrimary then
+	            node.Material = def.materialPrimary
+	        end
+
+	        -- Ensure a single named PointLight for tuning
+	        local light: PointLight? = node:FindFirstChild("RC_Light") :: PointLight
+	        if not light then
+	            light = Instance.new("PointLight")
+	            light.Name = "RC_Light"
+	            light.Parent = node
+	        end
+
+	        -- Configure light from defs (with sane defaults)
+	        local ldef = def.light
+	        if ldef then
+	            light.Color = ldef.color or def.color or Color3.new(1,1,1)
+	            light.Range = ldef.range or 10
+	            light.Brightness = ldef.brightness or 1
+	            light.Enabled = true
+	        else
+	            -- fallback minimal light using resource color
+	            light.Color = def.color or Color3.new(1,1,1)
+	            light.Range = 8
+	            light.Brightness = 0.6
+	            light.Enabled = true
+	        end
+
+	        -- Optional pulsing (guard against double-binding)
+	        if ldef and ldef.pulse and not node:GetAttribute("RC_PulseBound") then
+	            node:SetAttribute("RC_PulseBound", true)
+	            task.spawn(function()
+	                -- simple breathe loop; stops if node is removed
+	                while node and node.Parent do
+	                    local base = (ldef.brightness or 1)
+	                    -- brighten when visible; stay dim if hidden
+	                    if not node:GetAttribute("RC_Hidden") then
+	                        light.Brightness = base * 1.25
+	                        task.wait(0.35)
+	                        light.Brightness = base * 0.85
+	                        task.wait(0.35)
+	                    else
+	                        light.Brightness = base * 0.5
+	                        task.wait(0.5)
+	                    end
+	                end
+	            end)
+	        end
+	    end
+	end
+
+	local clickDetector = node:FindFirstChildOfClass("ClickDetector")
+	if not clickDetector then
+		clickDetector = Instance.new("ClickDetector")
+		clickDetector.MaxActivationDistance = 12
+		clickDetector.CursorIcon = ""
+		clickDetector.Parent = node
+	end
+	clickDetector.MouseClick:Connect(function(player)
+		tryCollect(player, node, rType)
+	end)
+
+	local prompt = node:FindFirstChildOfClass("ProximityPrompt")
+	if not prompt then
+	    prompt = Instance.new("ProximityPrompt")
+	    prompt.ActionText = "Collect"
+	    prompt.ObjectText = rType
+	    prompt.HoldDuration = 0
+	    -- Require LOS so the prompt doesn't appear through objects
+	    prompt.RequiresLineOfSight = true
+	    -- Tighter activation distance so it doesn't feel global
+	    prompt.MaxActivationDistance = 8
+	    -- Hide the default center-screen toast; we use click + our own HUD
+	    prompt.Style = Enum.ProximityPromptStyle.Custom
+	    prompt.Parent = node
+	end
+	prompt.Triggered:Connect(function(player)
+		tryCollect(player, node, rType)
+	end)
+end
+
+local function isResourceNode(inst: Instance): BasePart?
+	-- Exclude anything inside the garage model
+	local garage = workspace:FindFirstChild(GARAGE_MODEL_NAME)
+	if garage and inst:IsDescendantOf(garage) then return nil end
+
+	local function thinGround(bp: BasePart): boolean
+	    return (bp.Size.Y <= 1.5) and (bp.Position.Y <= 2.0)
+	end
+
+	if inst:IsA("Model") then
+	    if REQUIRE_RESOURCE_TAG and not CollectionService:HasTag(inst, RESOURCE_TAG) then
+	        return nil
+	    end
+	    local pp = inst.PrimaryPart
+	    if pp and not thinGround(pp) then
+			if _isNearGarage(pp) or _insideGarageRadius(pp) then
+				if GameConstants.DEBUG then
+					print(("[WorldInteract] Reject near-door candidate: %s @ %s"):format(pp:GetFullName(), tostring(pp.Position)))
+				end
+				return nil
+			end
+			return pp
+		end
+	    for _, d in ipairs(inst:GetDescendants()) do
+	        if d:IsA("BasePart") then
+	            if REQUIRE_RESOURCE_TAG and not CollectionService:HasTag(d, RESOURCE_TAG) then
+	                -- skip
+	            else
+	                if not thinGround(d) then
+						if _isNearGarage(d) or _insideGarageRadius(d) then
+							if GameConstants.DEBUG then
+								print(("[WorldInteract] Reject near-door candidate: %s @ %s"):format(d:GetFullName(), tostring(d.Position)))
+							end
+							return nil
+						end
+						return d
+					end
+	            end
+	        end
+	    end
+	    return nil
+	end
+
+	if inst:IsA("BasePart") then
+	    if REQUIRE_RESOURCE_TAG and not CollectionService:HasTag(inst, RESOURCE_TAG) then
+	        return nil
+	    end
+	    if thinGround(inst) then return nil end
+		if _isNearGarage(inst) or _insideGarageRadius(inst) then
+			if GameConstants.DEBUG then
+				print(("[WorldInteract] Reject near-door candidate: %s @ %s"):format(inst:GetFullName(), tostring(inst.Position)))
+			end
+			return nil
+		end
+	    return inst
+	end
+
+	return nil
+end
+
+if RESOURCES_ON then
+	for _, inst in ipairs(workspace:GetDescendants()) do
+		local node = isResourceNode(inst)
+		if node then
+			local rType = inferType(node)
+			if rType ~= "" then
+				attachHandlers(node, rType)
+				local pathStr = (node and node.GetFullName and node:GetFullName()) or tostring(node)
+                    if GameConstants.DEBUG then
+                        print(string.format("[RES_ATTACH] type=%s size=(%.2f,%.2f,%.2f) y=%.2f path=%s",
+                            rType, node.Size.X, node.Size.Y, node.Size.Z, node.Position.Y, pathStr))
+                    end
+			end
+		end
+	end
+        if GameConstants.DEBUG then
+            print("[RES_ATTACH] initial scan complete")
+        end
+end
+
+workspace.DescendantAdded:Connect(function(instance)
+	if not RESOURCES_ON then
+		return
+	end
+	if not REQUIRE_RESOURCE_TAG then
+		if instance:IsA("BasePart") then
+			local g = workspace:FindFirstChild(GARAGE_MODEL_NAME)
+			if (g and instance:IsDescendantOf(g)) or (instance.Size.Y <= 1.5 and instance.Position.Y <= 2.0) then
+				return
+			end
+		end
+	else
+		if not CollectionService:HasTag(instance, RESOURCE_TAG) then return end
+		if instance:IsA("BasePart") and (instance.Size.Y <= 1.5 and instance.Position.Y <= 2.0) then return end
+	end
+	local node = isResourceNode(instance)
+	if node then
+		local rType = inferType(node)
+		if rType ~= "" then
+			attachHandlers(node, rType)
+			local pathStr = (node and node.GetFullName and node:GetFullName()) or tostring(node)
+                if GameConstants.DEBUG then
+                    print(string.format("[RES_ATTACH] type=%s size=(%.2f,%.2f,%.2f) y=%.2f path=%s",
+                        rType, node.Size.X, node.Size.Y, node.Size.Z, node.Position.Y, pathStr))
+                end
+		end
+	end
+end)
