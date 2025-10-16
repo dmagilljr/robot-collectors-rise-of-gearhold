@@ -1,6 +1,6 @@
 {
   "$schema": "https://rojo.space/schemas/7.0.0.json",
-  "name": "robot-collectors-new-V1",
+  "name": "ROBOT_COLLECTORS",
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
