@@ -5,26 +5,39 @@
     "$className": "DataModel",
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
+      "$ignoreUnknownInstances": true,
       "shared": {
         "$path": "src/shared"
       }
     },
     "ServerScriptService": {
       "$className": "ServerScriptService",
+      "$ignoreUnknownInstances": true,
+      "Modules": {
+        "$className": "Folder",
+        "$path": "src/server/Modules"
+      },
+      "Services": {
+        "$className": "Folder",
+        "$path": "src/server/Services"
+      },
       "World": {
+        "$className": "Folder",
         "$path": "src/server/world"
       },
-      "Modules": {
-        "$path": "src/server_modules"
-      },
-      "services": {
-        "$path": "src/server/services"
+      "ServerInit": {
+        "$className": "Script",
+        "$path": "src/server/init.server.luau"
       }
     },
     "StarterPlayer": {
       "$className": "StarterPlayer",
+      "$ignoreUnknownInstances": true,
       "StarterPlayerScripts": {
-        "$path": "src/client"
+        "$className": "StarterPlayerScripts",
+        "Client": {
+          "$path": "src/client"
+        }
       }
     }
   }
