@@ -1,3 +1,0 @@
-[std]
-name = "roblox+luau"
-# No extra globals; rely on roblox+luau standard from Selene

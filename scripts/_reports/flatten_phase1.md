@@ -1,0 +1,35 @@
+# Flatten Phase-1 Report
+
+- Backed up 31 files to `scripts/_backup/20251016_173118/`
+- Moved (duplicates → archive):
+  - `src/server/bootstrap.server.luau` → `scripts/_archive/duplicates/server_bootstrap.server.luau`
+  - `src/server/Remotes.server.luau` → `scripts/_archive/duplicates/server_Remotes.server.luau`
+  - `src/server/spawn_guard.server.luau` → `scripts/_archive/duplicates/server_spawn_guard.server.luau`
+  - `src/server/zzz_server_banner.server.luau` → `scripts/_archive/duplicates/zzz_server_banner.server.luau`
+  - `src/server/zzz_mount_diag.server.luau` → `scripts/_archive/duplicates/zzz_mount_diag.server.luau`
+- Disabled debug (moved to `scripts/debug_disabled/`):
+  - `src/server/HideResourceOverlays.server.luau`
+  - `src/server/ScrapTerminator.server.luau`
+  - `src/server/RogueGroundKiller.server.luau`
+  - `src/server/ScrapHotfix.server.luau`
+  - `src/server/WatchNewParts.server.luau`
+  - `src/server/DumpScrap.server.luau`
+  - `src/server/RunOnce.server.luau`
+  - `src/ServerScriptService/RunOnce.server.luau`
+  - `src/client/HideResourceOverlays.client.luau`
+  - `src/client/NukeNearDoor.client.luau`
+  - `src/client/DumpScrap.client.luau`
+  - `src/client/ClickProbe.client.luau`
+  - `src/client/DebugPaverWatch.client.luau`
+- Removed duplicate tests: `src/server/tests/specs/DoorPlane_spec 2.luau`, `src/server/tests/specs/PathSampler_spec 2.luau`; moved remaining suite to `tests/server/`
+- Consolidated modules path:
+  - Archived legacy modules to `scripts/_archive/legacy_modules/`
+  - Refreshed `src/server/modules/DoorPlane.luau`, `src/server/modules/QuestService.luau`, `src/server/modules/ProgressionService.luau`, and added `src/server/modules/BuildGuard.luau`
+  - No additional require-path changes were necessary; existing scripts already point at `ServerScriptService.Modules`
+- Final keep list (core runtime files):
+  - Client: `src/client/Main.client.luau`, `src/client/ui/RightDock.client.luau`, `src/client/ui/ResourceHUD.client.luau`, `src/client/ZoneToast.client.luau`
+  - Shared: `src/shared/config/GameConstants.luau`, `src/shared/config/CollectConfig.luau`, `src/shared/ResourceDefs.luau`
+  - Server boot/world: `src/server/world/bootstrap.server.luau`, `src/server/world/WorldBoot.luau`, `src/server/world/Spawn.luau`, `src/server/world/TerrainLoader.server.luau`, `src/server/world/ZoneTrigger.server.luau`
+  - Services/gameplay: `src/server/world/Remotes.server.luau`, `src/server/services/ResourceService.server.luau`, `src/server/world/WorldInteract.server.luau`, `src/server/world/ResourceSpawner.server.luau`
+  - Garage: `src/server/world/Garage/Component.luau`, `src/server/world/Garage/Interior.luau`, `src/server/world/Garage/Fixup.luau`, `src/server/world/Garage/Animate.luau`
+- Skipped paths: none

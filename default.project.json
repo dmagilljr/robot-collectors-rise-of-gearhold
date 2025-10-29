@@ -8,6 +8,12 @@
       "$ignoreUnknownInstances": true,
       "shared": {
         "$path": "src/shared"
+      },
+      "Shared": {
+        "$path": "src/shared",
+        "Tags": {
+          "$path": "src/replicated/Shared/Tags.luau"
+        }
       }
     },
     "ServerScriptService": {
