@@ -3,47 +3,51 @@
   "name": "ROBOT_COLLECTORS",
   "tree": {
     "$className": "DataModel",
+
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
       "$ignoreUnknownInstances": true,
-      "shared": {
-        "$path": "src/shared"
+
+      "RC_Remotes": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true
       },
+
+      "Client": {
+        "$className": "Folder",
+        "$path": "src/replicated/Client"
+      },
+
       "Shared": {
-        "$path": "src/shared",
-        "Tags": {
-          "$path": "src/replicated/Shared/Tags.luau"
-        }
+        "$path": "src/shared"
       }
     },
+
     "ServerScriptService": {
       "$className": "ServerScriptService",
       "$ignoreUnknownInstances": true,
-      "Modules": {
-        "$className": "Folder",
-        "$path": "src/server/Modules"
-      },
-      "Services": {
-        "$className": "Folder",
-        "$path": "src/server/Services"
-      },
-      "World": {
-        "$className": "Folder",
-        "$path": "src/server/world"
-      },
+      "Modules":   { "$className": "Folder", "$path": "src/server/Modules" },
+      "Services":  { "$className": "Folder", "$path": "src/server/Services" },
+      "World":     { "$className": "Folder", "$path": "src/server/world" },
+      "Slice2World": { "$path": "src/server/Slice2World.server.luau" },
+      "SliceGarageWorld": { "$path": "src/server/SliceGarageWorld.server.luau" },
+      "RobotBootstrap": { "$path": "src/server/RobotBootstrap.server.luau" },
       "ServerInit": {
         "$className": "Script",
-        "$path": "src/server/init.server.luau"
+        "$path": "src/server/init.server.lua",
+        "$properties": {
+          "RunContext": "Server",
+          "Enabled": true
+        }
       }
     },
+
     "StarterPlayer": {
       "$className": "StarterPlayer",
       "$ignoreUnknownInstances": true,
       "StarterPlayerScripts": {
         "$className": "StarterPlayerScripts",
-        "Client": {
-          "$path": "src/client"
-        }
+        "Client": { "$path": "src/client" }
       }
     }
   }
